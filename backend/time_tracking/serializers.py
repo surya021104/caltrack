@@ -138,23 +138,47 @@ class LocationSerializer(serializers.ModelSerializer):
     id = serializers.CharField(read_only=True)
     employee_count = serializers.SerializerMethodField()
     zone_names = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Location
         fields = (
             "id", "name", "address", "lat", "lng",
-            "geofence_radius", "geofence_polygon",
+            "geofence_radius", "geofence_polygon", "geofence_type",
             "location_type", "is_active", "is_archived",
             "company", "created_at", "updated_at",
             "employee_count", "zone_names",
+            "created_by", "created_by_name",
         )
-        read_only_fields = ("id", "company", "created_at", "updated_at")
+        read_only_fields = (
+            "id", "company", "created_at", "updated_at",
+            "created_by", "created_by_name",
+        )
 
     def get_employee_count(self, obj):
         return obj.permitted_employees.count()
 
     def get_zone_names(self, obj):
         return list(obj.zones.values_list("name", flat=True))
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by_id:
+            return None
+        u = obj.created_by
+        return f"{u.first_name} {u.last_name}".strip() or u.username
+
+    # ── Phase 2: server-side polygon validation ──────────────────────────
+    def validate_geofence_polygon(self, value):
+        """Reject malformed GeoJSON polygons before they reach the DB.
+
+        None / empty are allowed (location may be circle-only). Any non-empty
+        value runs through the geo.validators gate which checks shape,
+        closure, vertex count, range, and self-intersection.
+        """
+        if value in (None, "", {}):
+            return None
+        from .geo.validators import validate_geojson_polygon
+        return validate_geojson_polygon(value)
 
 
 # ── Location Zone ─────────────────────────────────────────────────────────────

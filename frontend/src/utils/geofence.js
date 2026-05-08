@@ -118,6 +118,67 @@ export function findMatchingLocation(empLat, empLng, locations) {
   return null
 }
 
+// ── Shift-aware best location selection (Phase 5) ────────────────────────────
+/**
+ * Like findMatchingLocation, but if a shift requires a specific location
+ * we restrict the candidate set to that one site. Mirrors the backend
+ * geofence_service precedence rule.
+ *
+ * Returns:
+ *   { location, result, distance, shiftMatches }
+ *     shiftMatches: true if shift.location is set and we matched against it.
+ *                   false if shift.location is set but we ended up at a
+ *                   different site (i.e. shift_location_mismatch).
+ *                   null if no shift constraint.
+ */
+export function findBestLocation(empLat, empLng, locations, shift = null) {
+  const shiftLocId = shift?.location?.id ?? shift?.location_id ?? null
+
+  if (shiftLocId) {
+    // Restrict candidates to the shift's required site.
+    const required = locations.find((l) => String(l.id) === String(shiftLocId))
+    if (required) {
+      const { result, distance } = checkGeofence(empLat, empLng, required)
+      return {
+        location: required,
+        result,
+        distance,
+        shiftMatches: result === "inside",
+      }
+    }
+    // Shift requires a location we don't have client-side; let the server decide.
+    return { location: null, result: "outside", distance: null, shiftMatches: false }
+  }
+
+  // No shift constraint — fall back to nearest-match logic.
+  const match = findMatchingLocation(empLat, empLng, locations)
+  if (!match) return { location: null, result: "outside", distance: null, shiftMatches: null }
+  return { ...match, shiftMatches: null }
+}
+
+// ── Reason-code translation for backend dry-run responses (Phase 5) ──────────
+/**
+ * Maps the engine's reason code (from POST /time/geofence/validate-point/)
+ * to a short human label suitable for inline display. Keep in sync with
+ * the constants in time_tracking/geo/geofence_service.py.
+ */
+export const REASON_LABELS = {
+  inside_circle:           "Inside geofence",
+  inside_polygon:          "Inside geofence",
+  inside_hybrid:           "Inside geofence",
+  outside_circle:          "Outside geofence",
+  outside_polygon:         "Outside geofence",
+  shift_location_mismatch: "Wrong site for shift",
+  no_assigned_locations:   "No site assigned",
+  no_gps_provided:         "GPS not available",
+  geofence_disabled:       "Geofence off",
+  admin_override:          "Admin override",
+}
+
+export function reasonLabel(reasonCode) {
+  return REASON_LABELS[reasonCode] || reasonCode || ""
+}
+
 // ── Polygon centroid (approximate) ───────────────────────────────────────────
 function polygonCentroid(ring) {
   let lat = 0, lng = 0

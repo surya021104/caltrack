@@ -31,11 +31,26 @@ class Company(TenantMixin):
         FLEXIBLE = "flexible", "Flexible"
         
     compliance_mode = models.CharField(
-        max_length=20, 
-        choices=ComplianceMode.choices, 
+        max_length=20,
+        choices=ComplianceMode.choices,
         default=ComplianceMode.STRICT
     )
-    
+
+    # ── Shift-Location Enforcement (Phase 1, Layer 3) ───────────────────────
+    # Controls what happens when an employee clocks in for a shift but is not
+    # at the shift's required location. Default 'warn' preserves existing
+    # behaviour for tenants that have not configured shift locations yet.
+    class ShiftEnforcementMode(models.TextChoices):
+        BLOCK = "block", "Block clock-in"
+        WARN = "warn", "Allow with warning flag"
+        OFF = "off", "No shift-location enforcement"
+
+    shift_enforcement_mode = models.CharField(
+        max_length=10,
+        choices=ShiftEnforcementMode.choices,
+        default=ShiftEnforcementMode.WARN,
+    )
+
     allowed_countries = models.JSONField(default=list, blank=True)
     team_size = models.CharField(max_length=100, blank=True, null=True)
     selected_modules = models.JSONField(default=list, blank=True)

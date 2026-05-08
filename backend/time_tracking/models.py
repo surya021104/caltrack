@@ -29,6 +29,16 @@ class Location(models.Model):
         ("other", "Other"),
     ]
 
+    # ── Geofence shape discriminator (Phase 1, Layer 3) ──────────────────
+    # 'circle'  — use geofence_radius (current default behaviour)
+    # 'polygon' — use geofence_polygon (server-side validation in Phase 2)
+    # 'hybrid'  — accept point inside circle OR inside polygon
+    GEOFENCE_TYPES = [
+        ("circle", "Circle (radius)"),
+        ("polygon", "Polygon (GeoJSON)"),
+        ("hybrid", "Hybrid (circle OR polygon)"),
+    ]
+
     company = models.ForeignKey(
         'companies.Company', on_delete=models.CASCADE,
         related_name="saved_locations", null=True, blank=True
@@ -45,17 +55,38 @@ class Location(models.Model):
     # e.g. {"type":"Polygon","coordinates":[[[lng,lat],...]]}
     geofence_polygon = models.JSONField(null=True, blank=True)
 
+    # Discriminator — which shape to validate against. Default 'circle'
+    # mirrors current implicit behaviour for back-compat.
+    geofence_type = models.CharField(
+        max_length=10, choices=GEOFENCE_TYPES, default="circle"
+    )
+
     location_type = models.CharField(
         max_length=20, choices=LOCATION_TYPES, default="office"
     )
     is_active = models.BooleanField(default=True)
     is_archived = models.BooleanField(default=False)
 
+    # Audit: who created the location. Nullable for backfilled rows.
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="created_locations",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["name"]
+        # Phase 7: composite index used by LocationViewSet.get_queryset and
+        # LocationOverviewView, which always filter by (company, is_archived).
+        # The PostgreSQL GIN index on geofence_polygon is declared in the
+        # migration directly (GinIndex requires django.contrib.postgres,
+        # which we don't put in INSTALLED_APPS just to satisfy a single
+        # JSONB index definition).
+        indexes = [
+            models.Index(fields=["company", "is_archived"], name="loc_company_archived_idx"),
+        ]
 
     def __str__(self):
         return self.name
@@ -154,6 +185,10 @@ class TimeLog(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=["employee", "work_date"]),
+            # Phase 7: hot path for LocationOverviewView (open logs scan)
+            # and AdminEmployeeTimeLogsView (per-employee log list).
+            models.Index(fields=["employee", "work_date", "clock_in"], name="tl_emp_date_clockin_idx"),
+            models.Index(fields=["employee", "clock_out"], name="tl_emp_open_idx"),
         ]
 
     @property

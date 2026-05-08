@@ -20,6 +20,7 @@ from .views import (
     TimeLogSubmitView,
     TimeLogApprovalView,
     CurrentSessionView,
+    GeofenceValidatePointView,  # Phase 3 — dry-run geofence check
 )
 
 router = DefaultRouter()
@@ -44,6 +45,8 @@ urlpatterns = [
     path("logs/<str:pk>/approve/", TimeLogApprovalView.as_view(), name="time-log-approve"),
     # Layer 2 — Admin location overview (live map with employee counts)
     path("locations/overview/", LocationOverviewView.as_view(), name="location-overview"),
+    # Phase 3 (Layer 3) — Dry-run geofence validation for the frontend
+    path("geofence/validate-point/", GeofenceValidatePointView.as_view(), name="geofence-validate-point"),
 ]
 
 urlpatterns += router.urls

@@ -35,6 +35,16 @@ class ShiftViewSet(viewsets.ModelViewSet):
         if employee and employee.company_id != self.request.company.id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({"employee": "This employee does not belong to your company."})
+
+        # Phase 3: defense-in-depth tenant check on Shift.location FK.
+        # django-tenants schema isolation already prevents cross-tenant
+        # references at the DB level, but we surface a clean validation
+        # error if a malformed payload ever points at the wrong tenant.
+        location = serializer.validated_data.get('location')
+        if location and getattr(location, "company_id", None) and location.company_id != self.request.company.id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"location": "This location does not belong to your company."})
+
         serializer.save(company=self.request.company)
 
     def retrieve(self, request, *args, **kwargs):

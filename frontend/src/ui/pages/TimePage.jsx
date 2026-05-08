@@ -906,6 +906,14 @@ function EmployeeTimePage() {
   const [faceVerifyStatus, setFaceVerifyStatus] = useState(null) // null | 'verifying' | 'matched' | 'mismatch' | 'no_face'
   const [faceVerifyScore, setFaceVerifyScore] = useState(null)
 
+  // ── Phase 5: dry-run geofence preflight ─────────────────────────────
+  // Holds the most recent response from POST /api/time/geofence/validate-point/.
+  // Format mirrors the engine's Decision → see geofence_service.py.
+  // Shape: { allowed, decision, mode, matched_location, distance_m, radius_m,
+  //          candidate_count, geofence_passed, admin_override_used, shift }
+  const [preflight, setPreflight] = useState(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
+
   const now = useLiveClock()
   const openLog = useMemo(() => findOpenLog(logs), [logs])
   const openBreak = useMemo(() => findOpenBreak(openLog), [openLog])
@@ -989,6 +997,65 @@ function EmployeeTimePage() {
     }
     return null
   }, [distanceToSite, geofenceStatus, openLog])
+
+  // ── Phase 5: dry-run preflight via POST /api/time/geofence/validate-point/ ─
+  // Fires whenever GPS settles, debounced to avoid spamming on jitter.
+  // Skipped while clocked in (no preflight needed).
+  useEffect(() => {
+    if (openLog || !currentGPS) {
+      setPreflight(null)
+      return
+    }
+    let cancelled = false
+    const handle = setTimeout(async () => {
+      if (cancelled) return
+      setPreflightLoading(true)
+      try {
+        const res = await apiRequest("/time/geofence/validate-point/", {
+          method: "POST",
+          json: { lat: currentGPS.lat, lng: currentGPS.lon },
+        })
+        if (!cancelled) setPreflight(res)
+      } catch (err) {
+        if (!cancelled) {
+          // 4xx returns the legacy block body; 5xx is a real error. Either
+          // way, keep the UI usable — the actual /clock-in/ POST is the
+          // real authority.
+          setPreflight(err?.body || null)
+        }
+      } finally {
+        if (!cancelled) setPreflightLoading(false)
+      }
+    }, 800) // debounce: don't fire on every micro-update of GPS
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [currentGPS, openLog])
+
+  // Derived pill state — { tone, icon-name, label } for visual rendering.
+  const preflightPill = useMemo(() => {
+    if (openLog) return null
+    if (preflightLoading) return { tone: "neutral", label: "Checking site…" }
+    if (!preflight) return null
+    const dist = preflight.distance_m
+    const distStr = dist == null
+      ? ""
+      : dist < 1000 ? ` · ${dist}m` : ` · ${(dist/1000).toFixed(1)}km`
+
+    if (preflight.allowed && preflight.geofence_passed) {
+      const name = preflight.matched_location?.name || "your site"
+      return { tone: "ok", label: `Inside ${name}${distStr}` }
+    }
+    if (preflight.allowed && !preflight.geofence_passed) {
+      // Warn-only mode: server allowed but flagged. Surface the soft warning.
+      return { tone: "warn", label: `Outside geofence (warn-only)${distStr}` }
+    }
+    if (preflight.decision === "shift_location_mismatch") {
+      return { tone: "block", label: `Wrong site for current shift${distStr}` }
+    }
+    if (preflight.decision === "no_assigned_locations") {
+      return { tone: "warn", label: "No site assigned to you" }
+    }
+    return { tone: "block", label: `Outside geofence${distStr}` }
+  }, [preflight, preflightLoading, openLog])
 
   const load = useCallback(async () => {
     setLoading(true); setError("")
@@ -1618,9 +1685,40 @@ function EmployeeTimePage() {
             </div>
 
             {/* Sliding Panel Footer */}
-            <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex gap-4">
-              <button 
-                onClick={() => setPanelOpen(false)} 
+            <div className="px-8 pt-4 pb-2 border-t border-slate-100 bg-slate-50/50">
+              {/* Phase 5 — preflight pill: instant geofence feedback */}
+              {preflightPill && !openLog && (
+                <div
+                  className={`mb-4 rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs font-bold ${
+                    preflightPill.tone === "ok"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : preflightPill.tone === "warn"
+                        ? "bg-amber-50 text-amber-800 border border-amber-200"
+                        : preflightPill.tone === "block"
+                          ? "bg-rose-50 text-rose-800 border border-rose-200"
+                          : "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                  role="status"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      preflightPill.tone === "ok"
+                        ? "bg-emerald-500"
+                        : preflightPill.tone === "warn"
+                          ? "bg-amber-500"
+                          : preflightPill.tone === "block"
+                            ? "bg-rose-500"
+                            : "bg-slate-400"
+                    }`}
+                  />
+                  {preflightPill.label}
+                </div>
+              )}
+            </div>
+            <div className="px-8 pb-8 bg-slate-50/50 flex gap-4">
+              <button
+                onClick={() => setPanelOpen(false)}
                 className="flex-1 py-4 rounded-2xl text-sm font-black text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
               >
                 Cancel
@@ -1635,9 +1733,18 @@ function EmployeeTimePage() {
                   {openLog.task ? "COMPLETE & EXIT" : "CLOCK OUT"}
                 </button>
               ) : (
-                <button 
-                  onClick={() => { setPanelOpen(false); action("/time/clock-in/") }} 
-                  disabled={busy || (!resolvedAddr && gpsStatus !== "error") || !selfieFile || (!geofencePassed && geofenceStatus?.geofence_enabled && geofenceStatus?.strict_mode)}
+                <button
+                  onClick={() => { setPanelOpen(false); action("/time/clock-in/") }}
+                  disabled={
+                    busy
+                    || (!resolvedAddr && gpsStatus !== "error")
+                    || !selfieFile
+                    || (!geofencePassed && geofenceStatus?.geofence_enabled && geofenceStatus?.strict_mode)
+                    // Phase 5: also block client-side when the preflight came
+                    // back with allowed=false (server will reject too — this
+                    // just saves a network round-trip).
+                    || (preflight && preflight.allowed === false)
+                  }
                   className={`flex-[2] py-4 rounded-2xl text-sm font-black text-white flex items-center justify-center gap-2 transition-all shadow-xl ${(!selfieFile || (!resolvedAddr && gpsStatus !== "error")) ? 'bg-slate-400' : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-100'}`}
                 >
                   {busy ? <Loader2 size={18} className="animate-spin" /> : <Clock size={18} />}

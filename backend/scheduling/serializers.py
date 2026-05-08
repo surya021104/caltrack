@@ -10,11 +10,23 @@ class ShiftSerializer(serializers.ModelSerializer):
         queryset=Employee.objects.all(),
         pk_field=serializers.CharField()
     )
+    location_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Shift
-        fields = ("id", "employee", "shift_start", "shift_end", "title", "notes", "created_at", "updated_at")
-        read_only_fields = ("id", "created_at", "updated_at")
+        # Phase 1: location + enforcement_override are optional. Existing
+        # clients that don't send them keep working unchanged.
+        fields = (
+            "id", "employee",
+            "shift_start", "shift_end",
+            "title", "notes",
+            "location", "location_name", "enforcement_override",
+            "created_at", "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at", "location_name")
+
+    def get_location_name(self, obj):
+        return obj.location.name if obj.location_id else None
 
     def validate(self, attrs):
         start = attrs.get("shift_start")

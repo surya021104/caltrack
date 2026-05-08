@@ -44,6 +44,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "hire_date",
             "assigned_job_site",
             "job_site_name",
+            "allow_all_locations",  # Phase 1 — bypass EmployeeLocation filter
             "is_active",
             "created_at",
             "updated_at",

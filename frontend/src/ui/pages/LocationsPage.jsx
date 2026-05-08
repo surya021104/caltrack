@@ -9,6 +9,7 @@ import { Pill, Button, Card, Input, Select, TextArea } from "../components/kit.j
 import { ZonesPanel } from "./locations/ZonesPanel.jsx"
 import { AssignmentsPanel } from "./locations/AssignmentsPanel.jsx"
 import { MapOverview } from "./locations/MapOverview.jsx"
+import { GeofenceEditorModal } from "./locations/GeofenceEditorModal.jsx"
 
 /* ── Fix default Leaflet icons ────────────────────────────────── */
 delete L.Icon.Default.prototype._getIconUrl
@@ -110,6 +111,15 @@ export function LocationsPage() {
   /* ── Saved locations from DB ───────────────────────────────── */
   const [savedLocations, setSavedLocations] = useState([])
   const [loadingSaved, setLoadingSaved] = useState(true)
+
+  /* ── Phase 4: polygon-draw modal ──────────────────────────── */
+  const [editingGeofenceFor, setEditingGeofenceFor] = useState(null)
+
+  /* When the modal saves, splice the updated location back into our list. */
+  const handleGeofenceSaved = (updated) => {
+    if (!updated?.id) return
+    setSavedLocations((prev) => prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)))
+  }
 
   /* ── View toggle ───────────────────────────────────────────── */
   const [viewMode, setViewMode] = useState("map")
@@ -797,14 +807,26 @@ export function LocationsPage() {
                         </p>
                         <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
                           <div className="flex gap-2">
-                            <button 
+                            {/* Phase 4: open polygon editor for this site */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditingGeofenceFor(loc) }}
+                              className={`p-2.5 rounded-xl transition-colors ${
+                                loc.geofence_polygon
+                                  ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                  : "bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                              }`}
+                              title={loc.geofence_polygon ? "Edit polygon geofence" : "Draw polygon geofence"}
+                            >
+                              <Layers size={18} />
+                            </button>
+                            <button
                               onClick={(e) => { e.stopPropagation(); handleArchive(loc.id) }}
                               className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
                               title="Archive Site"
                             >
                               <Archive size={18} />
                             </button>
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); handleDelete(loc.id) }}
                               className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                               title="Delete Site"
@@ -1002,6 +1024,15 @@ export function LocationsPage() {
         }
       `}</style>
         </div>
+      )}
+
+      {/* ── Phase 4: Polygon geofence editor ──────────────────── */}
+      {editingGeofenceFor && (
+        <GeofenceEditorModal
+          location={editingGeofenceFor}
+          onClose={() => setEditingGeofenceFor(null)}
+          onSaved={handleGeofenceSaved}
+        />
       )}
     </div>
   )

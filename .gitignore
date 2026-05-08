@@ -33,3 +33,5 @@ node_modules/
 # Build
 dist/
 build/
+__pycache__/
+*.pyc

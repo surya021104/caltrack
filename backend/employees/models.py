@@ -15,7 +15,14 @@ class Employee(models.Model):
     company = models.ForeignKey('companies.Company', on_delete=models.CASCADE, related_name="employees")
     country = models.CharField(max_length=2, blank=True, null=True)
     state = models.CharField(max_length=100, blank=True, null=True)
-    
+
+    # ── Geofence override (Phase 1, Layer 3) ─────────────────────────────
+    # When True, the employee may clock in at ANY company location (still
+    # subject to per-location geofence radius/polygon). Bypasses the
+    # EmployeeLocation assignment filter. Default False keeps existing
+    # behaviour where employees must be explicitly assigned.
+    allow_all_locations = models.BooleanField(default=False)
+
     is_active = models.BooleanField(default=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

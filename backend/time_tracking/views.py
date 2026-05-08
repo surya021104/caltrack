@@ -39,23 +39,12 @@ class JobSiteViewSet(viewsets.ModelViewSet):
             serializer.save()
 
 
-class LocationViewSet(viewsets.ModelViewSet):
-    """CRUD for saved locations (Settings > Locations)."""
-    serializer_class = LocationSerializer
-
-    def get_permissions(self):
-        return [permissions.IsAuthenticated()]
-
-    def get_queryset(self):
-        if not hasattr(self.request, 'company'):
-            return Location.objects.none()
-        return Location.objects.filter(company=self.request.company).order_by("-created_at")
-
-    def perform_create(self, serializer):
-        if hasattr(self.request, 'company'):
-            serializer.save(company=self.request.company)
-        else:
-            serializer.save()
+# ── NOTE (Phase 1) ────────────────────────────────────────────────────────
+# A duplicate LocationViewSet used to live here. It has been removed in
+# favour of the richer one further down (search "LAYER 2: Multi-location"),
+# which supports the archived filter + admin-only write permissions.
+# Keeping a single source of truth eliminates the import-order ambiguity.
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -110,16 +99,33 @@ class TimeLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ClockInView(APIView):
+    """Clock-in endpoint.
+
+    Phase 2 refactor: all geofence decisioning is delegated to
+    time_tracking.geo.evaluate(). The view now owns only:
+      • authn lookup (employee → company)
+      • duplicate-clock-in guard
+      • request parsing (GPS, address, photo)
+      • TimeLog persistence
+
+    Response shapes are identical to the pre-refactor view so existing
+    frontends (TimePage, mobile) keep parsing distance/radius/message
+    unchanged. New clients can opt into the additional ``reason`` field.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        company = getattr(request, 'company', None)
+        from time_tracking.geo import evaluate, TenantMismatch
+
+        company = getattr(request, "company", None)
         employee = Employee.objects.filter(user=request.user, company=company).first()
         if not employee:
             return Response({"detail": "Employee profile not found."}, status=404)
+
         open_log = TimeLog.objects.filter(employee=employee, clock_out__isnull=True).first()
         if open_log:
             return Response({"detail": "Already clocked in."}, status=400)
+
         now = timezone.now()
         lat = request.data.get("lat")
         lon = request.data.get("lon")
@@ -127,79 +133,29 @@ class ClockInView(APIView):
         notes = request.data.get("notes", "")
         photo = request.FILES.get("photo")
 
-        # Layer 2 Geofence check
-        company = getattr(request, 'company', None)
-        
-        distance = None
-        passed = True
-        override_used = False
-        matched_location = None
-        
-        # 1. Determine the employee's allowed/assigned locations
-        permitted_locations = EmployeeLocation.objects.filter(employee=employee).select_related('location')
-        
-        # 2. Try to match location based on GPS
-        if permitted_locations.exists():
-            # If no GPS, fallback to primary location
-            primary_loc = permitted_locations.filter(is_primary=True).first()
-            matched_location = primary_loc.location if primary_loc else permitted_locations.first().location
-            
-            if lat and lon:
-                min_dist = float('inf')
-                best_loc = None
-                lat_f, lon_f = float(lat), float(lon)
-                for emp_loc in permitted_locations:
-                    loc = emp_loc.location
-                    if not loc.is_active:
-                        continue
-                    d = calculate_distance(lat_f, lon_f, loc.lat, loc.lng)
-                    if d < min_dist:
-                        min_dist = d
-                        best_loc = loc
-                        
-                if best_loc:
-                    matched_location = best_loc
-                    distance = min_dist
-        else:
-            # Fallback to Layer 1 JobSite
-            job_site = employee.assigned_job_site
-            if job_site and lat and lon:
-                distance = calculate_distance(float(lat), float(lon), job_site.lat, job_site.lng)
-                
-        # 3. Apply strict Geofencing Rules if enabled
-        if company and company.geofence_enabled and lat and lon:
-            if permitted_locations.exists() and matched_location:
-                radius = matched_location.geofence_radius or 300
-                if distance is not None and distance > radius:
-                    passed = False
-                    if company.geofence_strict_mode:
-                        if company.geofence_admin_override and request.user.role == "admin":
-                            override_used = True
-                            passed = True
-                        else:
-                            dist_km = round(distance / 1000, 1)
-                            return Response({
-                                "success": False,
-                                "message": f"You are {dist_km} km from the nearest authorized site. Move closer.",
-                                "distance": distance,
-                                "radius": radius
-                            }, status=403)
-            elif job_site:
-                radius = job_site.geofence_radius or company.geofence_radius_meters
-                if distance is not None and distance > radius:
-                    passed = False
-                    if company.geofence_strict_mode:
-                        if company.geofence_admin_override and request.user.role == "admin":
-                            override_used = True
-                            passed = True
-                        else:
-                            dist_km = round(distance / 1000, 1)
-                            return Response({
-                                "success": False,
-                                "message": f"You are {dist_km} km from the job site. Move closer.",
-                                "distance": distance,
-                                "radius": radius
-                            }, status=403)
+        # Resolve current shift (if any) so the engine can apply
+        # shift–location enforcement. We fall back to None if the model
+        # lookup misses; the engine treats None as "no shift constraint".
+        active_shift = _find_active_shift(employee, now)
+
+        try:
+            decision = evaluate(
+                employee=employee,
+                company=company,
+                lat=float(lat) if lat not in (None, "") else None,
+                lng=float(lon) if lon not in (None, "") else None,
+                shift=active_shift,
+                is_admin=(getattr(request.user, "role", None) == "admin"),
+                # Legacy behaviour granted admin override automatically when
+                # the requesting user was an admin. Preserve that.
+                request_admin_override=(getattr(request.user, "role", None) == "admin"),
+            )
+        except TenantMismatch:
+            return Response({"detail": "Employee/company mismatch."}, status=403)
+
+        # Strict block — return the legacy 403 body shape verbatim.
+        if not decision.allowed:
+            return Response(decision.to_block_response(), status=403)
 
         time_log = TimeLog.objects.create(
             employee=employee,
@@ -210,12 +166,54 @@ class ClockInView(APIView):
             clock_in_address=address,
             clock_in_notes=notes,
             clock_in_photo=photo,
-            distance_from_site_meters=distance,
-            geofence_passed=passed,
-            admin_override_used=override_used,
-            location=matched_location
+            distance_from_site_meters=decision.distance_m,
+            geofence_passed=decision.geofence_passed,
+            admin_override_used=decision.admin_override_used,
+            # Engine returns a Location *or* a JobSiteLocationAdapter wrapper.
+            # TimeLog.location accepts only real Locations, so we filter.
+            location=_unwrap_location(decision.matched_location),
         )
         return Response(TimeLogSerializer(time_log).data, status=201)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 helpers used by ClockInView
+# ─────────────────────────────────────────────────────────────────────────────
+def _find_active_shift(employee, now):
+    """Returns the Shift currently in progress for the employee, or None.
+
+    A shift is "active" if shift_start <= now <= shift_end. Using the
+    earliest matching shift keeps behaviour deterministic when overlap
+    exists (rare; admins rarely double-book).
+    """
+    try:
+        from scheduling.models import Shift  # local import to avoid cycle
+        return (
+            Shift.objects
+            .filter(employee=employee, shift_start__lte=now, shift_end__gte=now)
+            .order_by("shift_start")
+            .first()
+        )
+    except Exception:
+        # Defensive: scheduling app could be temporarily unavailable.
+        # Falling back to None means the engine treats this as no-shift,
+        # which matches pre-Phase-2 behaviour exactly.
+        return None
+
+
+def _unwrap_location(loc):
+    """Returns a real time_tracking.Location or None.
+
+    The engine wraps a legacy JobSite in an adapter for distance math.
+    TimeLog.location is a FK to Location, so we discard the adapter and
+    let the FK stay null in that case (matches pre-refactor behaviour
+    when employee had no Location assignments).
+    """
+    if loc is None:
+        return None
+    if isinstance(loc, Location):
+        return loc
+    return None
 
 
 class ClockOutView(APIView):
@@ -644,7 +642,12 @@ class LocationViewSet(viewsets.ModelViewSet):
         return qs.filter(is_archived=False)
 
     def perform_create(self, serializer):
-        serializer.save(company=self.request.company)
+        # Phase 1: capture creator on the audit field. Falls back gracefully
+        # for unauthenticated edge cases (which permission classes already
+        # block, but keep this defensive).
+        user = getattr(self.request, "user", None)
+        created_by = user if (user and getattr(user, "is_authenticated", False)) else None
+        serializer.save(company=self.request.company, created_by=created_by)
 
     def partial_update(self, request, *args, **kwargs):
         kwargs["partial"] = True
@@ -695,33 +698,101 @@ class LocationOverviewView(APIView):
     """
     Admin map overview — each location with live employee-on-site count.
     Used by the admin map to show colour-coded markers.
+
+    Phase 3 enrichment: every location now also carries `violation_count`,
+    `late_arrival_count`, `capacity`, `status`, and `geofence_type` so the
+    frontend can paint the marker without a second round-trip.
+
+    Phase 7 caching: response is memoised per tenant for the duration of
+    `OVERVIEW_CACHE_SECONDS`. The frontend polls every 30s, so a 30s cache
+    means each tenant sees at most one DB read per polling window even when
+    50 admins have the dashboard open simultaneously. Cache is busted by
+    a query-string param (`?fresh=1`), used by the manual Refresh button.
     """
     permission_classes = [IsAdminRole]
+
+    # Status colours the dashboard expects.
+    STATUS_INACTIVE = "inactive"
+    STATUS_ALERT = "alert"
+    STATUS_OVERCROWDED = "overcrowded"
+    STATUS_ACTIVE = "active"
+
+    # Late-arrival grace window — number of seconds after shift_start
+    # before a clock-in is flagged "late". Tunable per-tenant in Phase 7.
+    LATE_GRACE_SECONDS = 5 * 60
+
+    # Phase 7: cache TTL. Match the frontend polling interval so we avoid
+    # double-reads but still see fresh data within one cycle.
+    OVERVIEW_CACHE_SECONDS = 30
 
     def get(self, request):
         company = getattr(request, 'company', None)
         if not company:
             return Response([])
 
+        # Phase 7: locmem cache, keyed by tenant schema. Bypassed when
+        # the client explicitly asks for fresh data via ?fresh=1.
+        from django.core.cache import cache
+        bust = request.query_params.get("fresh") in ("1", "true", "yes")
+        cache_key = f"location_overview::{getattr(company, 'schema_name', company.id)}"
+        if not bust:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return Response(cached)
+
         locations = Location.objects.filter(company=company, is_archived=False)
-        # Employees currently clocked in (open time log)
-        active_logs = (
+
+        # Open time logs for the tenant — bounded scan, single query.
+        active_logs = list(
             TimeLog.objects
             .filter(employee__company=company, clock_out__isnull=True)
             .select_related("location", "employee__user")
         )
-        # Map: location_id -> list of employee names
-        on_site: dict = {}
+
+        # Aggregate per-location signals in a single pass.
+        on_site_employees: dict = {}
+        violations_by_loc: dict = {}
+        late_by_loc: dict = {}
+
+        # Pre-load the active shifts so we can compute lateness without N
+        # queries. Active = shift currently overlapping "now".
+        from django.utils import timezone
+        from scheduling.models import Shift  # local import: avoids cycles
+        now = timezone.now()
+        active_shifts = {
+            s.employee_id: s
+            for s in Shift.objects
+                .filter(company=company, shift_start__lte=now, shift_end__gte=now)
+        }
+
         for log in active_logs:
             lid = log.location_id
-            if lid:
-                on_site.setdefault(lid, []).append(
-                    log.employee.user.get_full_name() or log.employee.user.username
-                )
+            if not lid:
+                continue
+            on_site_employees.setdefault(lid, []).append(
+                log.employee.user.get_full_name() or log.employee.user.username
+            )
+            # Violation = clocked in but failed geofence and no admin override.
+            if not log.geofence_passed and not log.admin_override_used:
+                violations_by_loc[lid] = violations_by_loc.get(lid, 0) + 1
+            # Late arrival = clocked in past shift_start + grace.
+            shift = active_shifts.get(log.employee_id)
+            if shift and shift.shift_start and log.clock_in:
+                if (log.clock_in - shift.shift_start).total_seconds() > self.LATE_GRACE_SECONDS:
+                    late_by_loc[lid] = late_by_loc.get(lid, 0) + 1
 
         result = []
         for loc in locations:
-            employees_on_site = on_site.get(loc.id, [])
+            ids = on_site_employees.get(loc.id, [])
+            on_site_count = len(ids)
+            violation_count = violations_by_loc.get(loc.id, 0)
+            late_count = late_by_loc.get(loc.id, 0)
+
+            # Capacity field is reserved for Phase 7 (no model column yet);
+            # surface it as null so the frontend can render gracefully.
+            capacity = None
+            status = self._derive_status(loc, on_site_count, violation_count, capacity)
+
             result.append({
                 "id": str(loc.id),
                 "name": loc.name,
@@ -730,11 +801,143 @@ class LocationOverviewView(APIView):
                 "lng": loc.lng,
                 "geofence_radius": loc.geofence_radius,
                 "geofence_polygon": loc.geofence_polygon,
+                "geofence_type": loc.geofence_type,
                 "location_type": loc.location_type,
                 "is_active": loc.is_active,
                 "employee_count": loc.permitted_employees.count(),
-                "on_site_count": len(employees_on_site),
-                "on_site_employees": employees_on_site,
+                "on_site_count": on_site_count,
+                "on_site_employees": ids,
+                # Phase 3 NEW fields ────────────────────────────────────
+                "violation_count": violation_count,
+                "late_arrival_count": late_count,
+                "capacity": capacity,
+                "status": status,
             })
 
+        # Phase 7: persist for OVERVIEW_CACHE_SECONDS (30s default).
+        cache.set(cache_key, result, self.OVERVIEW_CACHE_SECONDS)
         return Response(result)
+
+    @classmethod
+    def _derive_status(cls, loc, on_site_count, violation_count, capacity):
+        """Status colour rules (matches the architecture-doc taxonomy):
+            inactive    → location is_active=False
+            alert       → any open violations
+            overcrowded → on_site > capacity (when capacity is set)
+            active      → otherwise
+        """
+        if not loc.is_active:
+            return cls.STATUS_INACTIVE
+        if violation_count > 0:
+            return cls.STATUS_ALERT
+        if capacity is not None and on_site_count > capacity:
+            return cls.STATUS_OVERCROWDED
+        return cls.STATUS_ACTIVE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Geofence validate-point (dry-run check used by the frontend
+# before clock-in). No DB writes; pure decision pass-through.
+# ─────────────────────────────────────────────────────────────────────────────
+class GeofenceValidatePointView(APIView):
+    """POST /api/time/geofence/validate-point/
+
+    Body:
+        { "lat": 12.97, "lng": 80.04, "shift_id": "<optional uuid>" }
+
+    Returns the same Decision the clock-in endpoint would, without
+    creating a TimeLog. Used by TimePage to give instant "you're inside"
+    / "you're 1.2km away" feedback before the user commits.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        from time_tracking.geo import evaluate, TenantMismatch
+        from time_tracking.geo.validators import validate_lat_lng
+
+        company = getattr(request, "company", None)
+        employee = Employee.objects.filter(user=request.user, company=company).first()
+        if not employee:
+            return Response({"detail": "Employee profile not found."}, status=404)
+
+        # Coerce + range-check coordinates.
+        try:
+            lat, lng = validate_lat_lng(
+                request.data.get("lat"),
+                request.data.get("lng"),
+            )
+        except Exception as exc:
+            # validators raises rest_framework.exceptions.ValidationError
+            return Response({"detail": getattr(exc, "detail", str(exc))}, status=400)
+
+        # Optional shift override — admin scheduling tools may pass a specific
+        # shift_id to test. Otherwise we resolve the active shift like
+        # ClockInView does.
+        shift = None
+        shift_id = request.data.get("shift_id")
+        if shift_id:
+            from scheduling.models import Shift
+            shift = (
+                Shift.objects
+                .filter(id=shift_id, company=company, employee=employee)
+                .first()
+            )
+            if not shift:
+                return Response({"detail": "Shift not found."}, status=404)
+        else:
+            from django.utils import timezone
+            shift = _find_active_shift(employee, timezone.now())
+
+        try:
+            decision = evaluate(
+                employee=employee,
+                company=company,
+                lat=lat,
+                lng=lng,
+                shift=shift,
+                is_admin=(getattr(request.user, "role", None) == "admin"),
+                # Dry-run: NEVER auto-apply admin override. The caller can
+                # opt in explicitly via request_admin_override=true.
+                request_admin_override=bool(request.data.get("request_admin_override")),
+            )
+        except TenantMismatch:
+            return Response({"detail": "Employee/company mismatch."}, status=403)
+
+        # Shape — mirrors the architecture-doc API contract.
+        matched = decision.matched_location
+        matched_block = None
+        if matched is not None:
+            matched_block = {
+                "id": str(getattr(matched, "id", "")) if getattr(matched, "id", None) else None,
+                "name": getattr(matched, "name", None),
+                "geofence_radius": getattr(matched, "geofence_radius", None),
+                "geofence_type": getattr(matched, "geofence_type", "circle"),
+            }
+
+        shift_block = None
+        if shift is not None:
+            shift_loc_id = getattr(getattr(shift, "location", None), "id", None)
+            shift_block = {
+                "id": str(shift.id),
+                "location_id": str(shift_loc_id) if shift_loc_id else None,
+                "matches": (
+                    matched is not None
+                    and shift_loc_id is not None
+                    and getattr(matched, "id", None) == shift_loc_id
+                ),
+                "enforcement_override": getattr(shift, "enforcement_override", "inherit"),
+            }
+
+        return Response({
+            "allowed": decision.allowed,
+            "decision": decision.reason,
+            "mode": decision.mode,
+            "matched_location": matched_block,
+            "distance_m": decision.distance_m,
+            "radius_m": decision.radius_m,
+            "candidate_count": decision.candidate_count,
+            "geofence_passed": decision.geofence_passed,
+            "admin_override_used": decision.admin_override_used,
+            "shift": shift_block,
+        })
+# end of views.py

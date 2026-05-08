@@ -13,6 +13,7 @@ class CompanySerializer(serializers.ModelSerializer):
             "primary_country",
             "default_state",
             "compliance_mode",
+            "shift_enforcement_mode",  # Phase 1 — block | warn | off
             "allowed_countries",
             "team_size",
             "selected_modules",
