@@ -82,7 +82,7 @@ class DashboardAnalyticsView(APIView):
             employee__company=company,
             work_date__gte=today.replace(day=1),
             clock_out__isnull=False,
-        )
+        ).prefetch_related('breaks')
         total_hours_month = 0
         for log in month_logs:
             total_hours_month += log.worked_seconds() / 3600
@@ -92,7 +92,7 @@ class DashboardAnalyticsView(APIView):
             employee__company=company,
             work_date__gte=seven_days_ago,
             clock_out__isnull=False,
-        )
+        ).prefetch_related('breaks')
         total_hours_week = 0
         for log in week_logs:
             total_hours_week += log.worked_seconds() / 3600
@@ -132,7 +132,7 @@ class DashboardAnalyticsView(APIView):
                 employee=emp,
                 work_date__gte=thirty_days_ago,
                 clock_out__isnull=False,
-            )
+            ).prefetch_related('breaks')
             total = 0
             for log in emp_logs:
                 total += log.worked_seconds() / 3600
@@ -150,7 +150,7 @@ class DashboardAnalyticsView(APIView):
             employee__company=company,
             work_date__gte=thirty_days_ago,
             clock_out__isnull=False,
-        )
+        ).prefetch_related('breaks')
         for log in all_logs_30d:
             day_key = str(log.work_date)
             daily_hours[day_key] += log.worked_seconds() / 3600
@@ -300,7 +300,7 @@ class DashboardAnalyticsView(APIView):
             clock_out__isnull=False,
             clock_in_lat__isnull=False,
             clock_in_lon__isnull=False,
-        )
+        ).prefetch_related('breaks')
         # Pre-compute hours per log
         log_data = []
         for log in logs_30d:
