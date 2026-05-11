@@ -2,11 +2,19 @@ Django>=5.2
 djangorestframework>=3.16
 djangorestframework-simplejwt>=5.5
 django-cors-headers>=4.0
-django-mongodb-backend
-pymongo>=4.0
 psycopg2-binary>=2.9
 django-tenants>=3.10
 python-dotenv>=1.0
 Pillow>=10.0
 requests>=2.31
 reportlab>=4.0
+
+# WebSockets / Real-time
+channels>=4.2
+channels-redis>=4.2
+daphne>=4.1
+
+# Celery / Task queue
+celery>=5.4
+redis>=5.2
+django-celery-beat>=2.7

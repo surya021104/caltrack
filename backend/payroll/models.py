@@ -38,11 +38,30 @@ class PayrollRecord(models.Model):
 
     regular_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     overtime_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    # CA/AK daily OT breakdown
+    daily_ot_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    double_time_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     paid_leave_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     unpaid_leave_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
 
     gross_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # UK PAYE deductions
+    uk_income_tax = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    uk_employee_ni = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    uk_employer_ni = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    uk_tax_code = models.CharField(max_length=20, blank=True, null=True)
+    uk_ni_category = models.CharField(max_length=1, blank=True, null=True)
+
+    # Holiday accrual this period (UK WTR)
+    holiday_hours_accrued = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
     net_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # Compliance flags
+    region = models.CharField(max_length=50, blank=True, null=True)  # e.g. "US FLSA (CA)"
+    is_exempt = models.BooleanField(default=False)  # FLSA exempt?
+    wage_floor_compliant = models.BooleanField(default=True)
 
     generated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="generated_payroll"

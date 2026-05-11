@@ -109,33 +109,82 @@ export function PayrollPage() {
         {loading ? (
           <div className="muted">Loading…</div>
         ) : records.length ? (
-          <div className="table">
-            <div className="tableRow tableHead">
-              <div>Employee</div>
-              <div>Period</div>
-              <div className="right">Net</div>
-              <div className="right">Regular</div>
-              <div className="right">OT</div>
-            </div>
-            {records.map((r) => (
-              <div key={r.id} className="tableRow">
-                <div style={{ fontWeight: 600 }}>
-                  {r.employee ? formatEmployeeId(r.employee) : "—"}
-                  {r.employee_name ? <div className="muted">{r.employee_name}</div> : null}
-                  {!r.employee && !r.employee_name ? <div className="muted">{r.id}</div> : null}
-                </div>
-                <div>
-                  <span className="muted">
-                    {r.period?.start_date} → {r.period?.end_date}
-                  </span>
-                </div>
-                <div className="right">
-                  <Pill tone="good">${r.net_pay}</Pill>
-                </div>
-                <div className="right">{r.regular_hours}</div>
-                <div className="right">{r.overtime_hours}</div>
-              </div>
-            ))}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid var(--stroke)", textTransform: "uppercase", fontSize: 11, color: "var(--muted)", letterSpacing: "0.05em" }}>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>Employee</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>Period</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>Region</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Gross</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Net</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Regular hrs</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>OT hrs</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Daily OT</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Double Time</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Tax (UK)</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Emp NI</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Employer NI</th>
+                  <th style={{ padding: "8px 10px", textAlign: "right" }}>Holiday Accrual</th>
+                  <th style={{ padding: "8px 10px", textAlign: "center" }}>Flags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((r) => {
+                  const isUK = r.region && r.region.includes("UK")
+                  const curr = isUK ? "£" : "$"
+                  return (
+                    <tr key={r.id} style={{ borderBottom: "1px solid var(--stroke2)" }}>
+                      <td style={{ padding: "10px 10px", fontWeight: 600 }}>
+                        {r.employee ? formatEmployeeId(r.employee) : "—"}
+                        {r.employee_name && <div style={{ fontSize: 11, color: "var(--muted)" }}>{r.employee_name}</div>}
+                      </td>
+                      <td style={{ padding: "10px 10px", color: "var(--muted)", fontSize: 12 }}>
+                        {r.period?.start_date} → {r.period?.end_date}
+                      </td>
+                      <td style={{ padding: "10px 10px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1" }}>{r.region || "—"}</span>
+                        {r.is_exempt && <div style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>FLSA EXEMPT</div>}
+                        {isUK && r.uk_tax_code && <div style={{ fontSize: 10, color: "var(--muted)" }}>Tax: {r.uk_tax_code} · NI: {r.uk_ni_category}</div>}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", fontWeight: 600 }}>{curr}{r.gross_pay}</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right" }}>
+                        <Pill tone="good">{curr}{r.net_pay}</Pill>
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right" }}>{r.regular_hours}h</td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: Number(r.overtime_hours) > 0 ? "#d97706" : "var(--fg)", fontWeight: Number(r.overtime_hours) > 0 ? 700 : 400 }}>
+                        {r.overtime_hours}h
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: Number(r.daily_ot_hours) > 0 ? "#ea580c" : "var(--muted)" }}>
+                        {Number(r.daily_ot_hours) > 0 ? `${r.daily_ot_hours}h` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: Number(r.double_time_hours) > 0 ? "#dc2626" : "var(--muted)", fontWeight: Number(r.double_time_hours) > 0 ? 700 : 400 }}>
+                        {Number(r.double_time_hours) > 0 ? `${r.double_time_hours}h` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: "var(--muted)" }}>
+                        {isUK && Number(r.uk_income_tax) > 0 ? `£${r.uk_income_tax}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: "var(--muted)" }}>
+                        {isUK && Number(r.uk_employee_ni) > 0 ? `£${r.uk_employee_ni}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: "var(--muted)" }}>
+                        {isUK && Number(r.uk_employer_ni) > 0 ? `£${r.uk_employer_ni}` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "right", color: Number(r.holiday_hours_accrued) > 0 ? "#059669" : "var(--muted)" }}>
+                        {Number(r.holiday_hours_accrued) > 0 ? `${r.holiday_hours_accrued}h` : "—"}
+                      </td>
+                      <td style={{ padding: "10px 10px", textAlign: "center" }}>
+                        {!r.wage_floor_compliant && (
+                          <span style={{ fontSize: 10, background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 4, padding: "2px 6px", fontWeight: 700 }}>
+                            MIN WAGE
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="muted">No payroll records yet.</div>

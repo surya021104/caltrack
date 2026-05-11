@@ -26,6 +26,8 @@ SHARED_APPS = [
     "accounts",  # users are shared
     "corsheaders",
     "rest_framework",
+    "channels",            # WebSocket support
+    "django_celery_beat",  # Celery periodic tasks
 ]
 
 TENANT_APPS = [
@@ -38,6 +40,7 @@ TENANT_APPS = [
     "reports",
     "tasks",
     "live_locations",
+    "compliance",  # US FLSA + UK WTR compliance engine
 ]
 
 INSTALLED_APPS = list(set(SHARED_APPS + TENANT_APPS))
@@ -175,7 +178,10 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     o
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174").split(",")
+    for o in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+    ).split(",")
     if o
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -183,4 +189,23 @@ CORS_ALLOW_CREDENTIALS = True
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# ── Django Channels ──────────────────────────────────────────────────────────
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.getenv("REDIS_HOST", "127.0.0.1"), int(os.getenv("REDIS_PORT", "6379")))],
+            "capacity": 1500,
+            "expiry": 10,
+        },
+    },
+}
 
+# ── Celery ────────────────────────────────────────────────────────────────────
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"

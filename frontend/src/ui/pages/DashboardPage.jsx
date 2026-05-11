@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, lazy, Suspense } from "react"
-import { Clock, Users, Briefcase, CalendarDays, DollarSign, Loader2, AlertCircle, Timer, Activity, MapPin } from "lucide-react"
+import { Clock, Users, Briefcase, CalendarDays, DollarSign, Loader2, AlertCircle, Timer, Activity, MapPin, ShieldAlert, TrendingUp, FileWarning, BadgeCheck, XCircle } from "lucide-react"
 
 import { apiRequest } from "../../api/client.js"
 import { useAuth } from "../../state/auth/useAuth.js"
@@ -70,6 +70,10 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [analytics, setAnalytics] = useState(null)
+  const [otAlerts, setOtAlerts] = useState([])
+  const [wageViolations, setWageViolations] = useState([])
+  const [rtwExpiring, setRtwExpiring] = useState([])
+  const [complianceDismissed, setComplianceDismissed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -90,7 +94,34 @@ export function DashboardPage() {
       }
     }
 
-    if (user) load()
+    async function loadCompliance() {
+      try {
+        // OT risk
+        const otData = await apiRequest("/compliance/ot-risk/")
+        if (!cancelled && otData?.data?.alerts) setOtAlerts(otData.data.alerts)
+      } catch (_) {}
+      try {
+        // Wage floor violations
+        const wfData = await apiRequest("/compliance/wage-floor/")
+        if (!cancelled && wfData?.data?.violations) setWageViolations(wfData.data.violations)
+      } catch (_) {}
+      try {
+        // RTW expiry (UK)
+        const rtwData = await apiRequest("/compliance/rtw/expiry-check/")
+        if (!cancelled && rtwData?.data) {
+          const expiring = [
+            ...(rtwData.data.expiring_within_60_days || []),
+            ...(rtwData.data.expired || []),
+          ]
+          setRtwExpiring(expiring)
+        }
+      } catch (_) {}
+    }
+
+    if (user) {
+      load()
+      if (user.role === "admin") loadCompliance()
+    }
     return () => { cancelled = true }
   }, [user])
 
@@ -642,6 +673,105 @@ export function DashboardPage() {
       {error && (
         <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-lg border border-red-200 font-medium">
           <AlertCircle size={18} /> {error}
+        </div>
+      )}
+
+      {/* ── Compliance Risk Banner (admin only) ── */}
+      {user?.role === "admin" && !complianceDismissed && (otAlerts.length > 0 || wageViolations.length > 0 || rtwExpiring.length > 0) && (
+        <div style={{
+          background: "linear-gradient(135deg, #fef3c7 0%, #fde8d8 100%)",
+          border: "1.5px solid #f59e0b",
+          borderRadius: 14,
+          padding: "16px 20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          position: "relative",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <ShieldAlert size={22} color="#d97706" />
+              <span style={{ fontWeight: 700, fontSize: 15, color: "#92400e" }}>
+                Compliance Alerts — Action Required
+              </span>
+            </div>
+            <button
+              onClick={() => setComplianceDismissed(true)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#92400e", display: "flex", alignItems: "center" }}
+            >
+              <XCircle size={18} />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {/* OT Alerts */}
+            {otAlerts.map((a, i) => {
+              const isUK = a.country === "UK"
+              const isExceeded = a.alert_type === "exceeded_40" || a.alert_type === "exceeded_48_uk"
+              const isDoubleTime = a.alert_type === "double_time_ca"
+              const color = isDoubleTime ? "#dc2626" : isExceeded ? "#d97706" : "#2563eb"
+              const bg = isDoubleTime ? "#fef2f2" : isExceeded ? "#fffbeb" : "#eff6ff"
+              const border = isDoubleTime ? "#fca5a5" : isExceeded ? "#fcd34d" : "#bfdbfe"
+              const labels = {
+                approaching_40: "Approaching 40hr limit",
+                exceeded_40: "OT Pay Required (>40hrs)",
+                daily_ot_ca: "CA Daily OT (>8hrs)",
+                double_time_ca: "CA Double Time (>12hrs)",
+                daily_ot_ak: "AK Daily OT (>8hrs)",
+                approaching_48_uk: "UK WTR: Approaching 48hr avg",
+                exceeded_48_uk: "UK WTR: 48hr Limit Breached",
+              }
+              return (
+                <div key={i} style={{
+                  background: bg, border: `1.5px solid ${border}`, borderRadius: 8,
+                  padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
+                }}>
+                  <TrendingUp size={14} color={color} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color }}>
+                    {labels[a.alert_type] || a.alert_type}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    {a.employee_name} — {a.hours_this_week != null ? `${a.hours_this_week}h` : a.rolling_17wk_avg != null ? `avg ${a.rolling_17wk_avg}h/wk` : ""}
+                    {a.state ? ` (${a.state})` : isUK ? " (UK)" : ""}
+                    {a.wtr_opt_out ? " · Opt-out active" : ""}
+                  </span>
+                </div>
+              )
+            })}
+
+            {/* Wage floor violations */}
+            {wageViolations.map((v, i) => (
+              <div key={`wf-${i}`} style={{
+                background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: 8,
+                padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
+              }}>
+                <FileWarning size={14} color="#dc2626" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#dc2626" }}>
+                  Below Minimum Wage
+                </span>
+                <span style={{ fontSize: 11, color: "#64748b" }}>
+                  {v.employee_name} — ${v.hourly_rate}/hr (floor: ${v.minimum_wage_floor}/hr, shortfall: ${v.shortfall_per_hour.toFixed(2)}/hr)
+                  {v.country === "UK" ? " · UK NMW" : v.state ? ` · ${v.state}` : " · Federal"}
+                </span>
+              </div>
+            ))}
+
+            {/* RTW expiry */}
+            {rtwExpiring.map((r, i) => (
+              <div key={`rtw-${i}`} style={{
+                background: "#fff7ed", border: "1.5px solid #fed7aa", borderRadius: 8,
+                padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
+              }}>
+                <BadgeCheck size={14} color="#ea580c" />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#ea580c" }}>
+                  RTW {r.days_until_expiry != null && r.days_until_expiry >= 0 ? `Expiring in ${r.days_until_expiry}d` : "Expired"}
+                </span>
+                <span style={{ fontSize: 11, color: "#64748b" }}>
+                  {r.employee_name} — {r.document_type} · {r.expiry_date}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

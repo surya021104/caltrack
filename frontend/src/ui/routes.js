@@ -38,5 +38,5 @@ export const routes = {
   settings_billing: "/settings/billing",
   settings_data: "/settings/data",
   onboarding: "/onboarding",
+  compliance: "/compliance",
 }
-

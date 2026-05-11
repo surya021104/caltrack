@@ -205,13 +205,103 @@ function useLocationTracker(isClockedIn) {
       }
     }
 
-    // Initial report
     reportLocation()
+<<<<<<< HEAD
+=======
 
     // Every 5 minutes (reduced frequency to save DB connections and battery)
+>>>>>>> 17a742eb5a8defc6b5fe95580ed3cf26ba609ecd
     const id = setInterval(reportLocation, 300000)
     return () => clearInterval(id)
   }, [isClockedIn])
+}
+
+/**
+ * useWsLocationTracker — WebSocket-based GPS tracking (Layer 4).
+ *
+ * Sends location_ping every 30 s via WebSocket when clocked in.
+ * Falls back to REST if WebSocket is not open.
+ * Returns { sendSOS } so the SOS button can push alerts.
+ */
+function useWsLocationTracker(isClockedIn) {
+  const wsRef = useRef(null)
+  const pingRef = useRef(null)
+  const reconnectRef = useRef(null)
+  const mountedRef = useRef(true)
+
+  const sendGpsPing = useCallback(() => {
+    if (!isClockedIn) return
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => {
+        const payload = {
+          type: "location_ping",
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+        }
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify(payload))
+        } else {
+          // REST fallback
+          apiRequest("/live-locations/update/", {
+            method: "POST",
+            json: { lat: payload.lat, lng: payload.lng },
+          }).catch(() => {})
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }, [isClockedIn])
+
+  useEffect(() => {
+    mountedRef.current = true
+    if (!isClockedIn) return
+
+    const connect = () => {
+      if (!mountedRef.current) return
+      const tokens = getTokens()
+      if (!tokens?.access) return
+
+      const WS_BASE =
+        (typeof import.meta !== "undefined" && import.meta.env?.VITE_WS_BASE_URL) ||
+        "ws://localhost:8000"
+      const ws = new WebSocket(`${WS_BASE}/ws/live/employee/?token=${encodeURIComponent(tokens.access)}`)
+      wsRef.current = ws
+
+      ws.onopen = () => sendGpsPing()
+      ws.onclose = (e) => {
+        if (mountedRef.current && ![4001, 4002, 4003, 4004].includes(e.code)) {
+          reconnectRef.current = setTimeout(connect, 5000)
+        }
+      }
+      ws.onerror = () => {}
+    }
+
+    connect()
+    sendGpsPing()
+    pingRef.current = setInterval(sendGpsPing, 30000)
+
+    return () => {
+      mountedRef.current = false
+      clearInterval(pingRef.current)
+      clearTimeout(reconnectRef.current)
+      if (wsRef.current) {
+        wsRef.current.onclose = null
+        wsRef.current.close(1000)
+      }
+    }
+  }, [isClockedIn, sendGpsPing])
+
+  const sendSOS = useCallback((lat, lng) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "sos", lat, lng }))
+      return true
+    }
+    return false
+  }, [])
+
+  return { sendSOS }
 }
 
 // ─── UI Components ──────────────────────────────────────────────
@@ -939,8 +1029,42 @@ function EmployeeTimePage() {
   const elapsed = useElapsed(openLog?.clock_in)
   const breakElapsed = useBreakTimer(openBreak)
 
-  // Start live location reporting if clocked in
-  useLocationTracker(!!openLog && !openBreak)
+  // Layer 4: WS-based GPS tracking + SOS
+  const { sendSOS } = useWsLocationTracker(!!openLog)
+  const [sosSending, setSosSending] = useState(false)
+  const [sosConfirmed, setSosConfirmed] = useState(false)
+
+  const handleSOS = useCallback(async () => {
+    if (sosSending || sosConfirmed) return
+    if (!window.confirm("Send SOS alert? Your admin will be notified immediately with your location.")) return
+    setSosSending(true)
+    try {
+      const sendWithCoords = async (lat, lng) => {
+        const sent = sendSOS(lat, lng)
+        if (!sent) {
+          await apiRequest("/live-locations/sos/", {
+            method: "POST",
+            json: lat !== null ? { lat, lng } : {},
+          })
+        }
+        setSosConfirmed(true)
+        setTimeout(() => setSosConfirmed(false), 8000)
+      }
+
+      navigator.geolocation?.getCurrentPosition(
+        (pos) => sendWithCoords(pos.coords.latitude, pos.coords.longitude),
+        () => sendWithCoords(null, null),
+        { enableHighAccuracy: true, timeout: 6000 }
+      )
+    } catch (err) {
+      console.error("SOS failed:", err)
+    } finally {
+      setSosSending(false)
+    }
+  }, [sendSOS, sosSending, sosConfirmed])
+
+  // Legacy REST polling fallback (kept for compatibility)
+  useLocationTracker(false)
 
   // Preload face models when clocked in
   useEffect(() => {
@@ -1328,7 +1452,40 @@ function EmployeeTimePage() {
                   <span className="text-lg font-black tabular-nums">{formatDuration(elapsed)}</span>
                 </div>
                 <div className="flex items-center gap-1 ml-2">
+<<<<<<< HEAD
+                  {!openBreak ? (
+                    <>
+                      <button onClick={() => action("/time/break/start/")} className="p-2.5 bg-slate-800 hover:bg-amber-500 text-white rounded-xl transition-all" title="Start Break"><Coffee size={16} /></button>
+                      <button onClick={() => setPanelOpen(true)} className="p-2.5 bg-slate-800 hover:bg-emerald-500 text-white rounded-xl transition-all" title="Job Photo"><Camera size={16} /></button>
+                      <button onClick={handleClockOut} className="p-2.5 bg-slate-800 hover:bg-red-500 text-white rounded-xl transition-all" title="Clock Out"><Square size={14} fill="currentColor" /></button>
+                      {/* SOS panic button */}
+                      <button
+                        onClick={handleSOS}
+                        disabled={sosSending}
+                        title="SOS — Send emergency alert to admin"
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 12,
+                          background: sosConfirmed ? "#059669" : "#E94560",
+                          color: "white",
+                          border: "none",
+                          fontWeight: 900,
+                          fontSize: 10,
+                          cursor: "pointer",
+                          letterSpacing: "0.06em",
+                          opacity: sosSending ? 0.7 : 1,
+                          boxShadow: sosConfirmed ? "none" : "0 0 0 3px rgba(233,69,96,0.3)",
+                          animation: !sosConfirmed && !sosSending ? "sosPulse 2s infinite" : "none",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {sosConfirmed ? "✓ SENT" : sosSending ? "…" : "SOS"}
+                      </button>
+                    </>
+                  ) : (
+=======
                   {openBreak ? (
+>>>>>>> 17a742eb5a8defc6b5fe95580ed3cf26ba609ecd
                     <button onClick={() => action("/time/break/end/")} className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black rounded-xl flex items-center gap-2 transition-all"><Play size={14} /> RESUME</button>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -1812,6 +1969,7 @@ function EmployeeTimePage() {
           </div>
         </div>
       )}
+      <style>{`@keyframes sosPulse{0%,100%{box-shadow:0 0 0 3px rgba(233,69,96,.35)}50%{box-shadow:0 0 0 6px rgba(233,69,96,.1)}}`}</style>
     </>
   )
 }
