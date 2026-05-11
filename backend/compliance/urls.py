@@ -25,13 +25,13 @@ router.register("rtw", RightToWorkViewSet, basename="rtw")
 router.register("wtr-optout", WTROptOutViewSet, basename="wtr-optout")
 
 urlpatterns = [
+    path("rtw/expiry-check/", RTWExpiryCheckView.as_view(), name="rtw-expiry-check"),
+    path("rtw/send-alerts/", RTWAlertEmailView.as_view(), name="rtw-send-alerts"),
     path("", include(router.urls)),
     path("ot-risk/", OTRiskDashboardView.as_view(), name="ot-risk-dashboard"),
     path("uk-48hr/", UK48HrMonitorView.as_view(), name="uk-48hr-monitor"),
     path("uk-48hr/<int:employee_id>/", UK48HrMonitorView.as_view(), name="uk-48hr-employee"),
     path("holiday-accrual/accrue/<int:employee_id>/", EmployeeHolidayAccrualView.as_view(), name="holiday-accrue"),
-    path("rtw/expiry-check/", RTWExpiryCheckView.as_view(), name="rtw-expiry-check"),
-    path("rtw/send-alerts/", RTWAlertEmailView.as_view(), name="rtw-send-alerts"),
     path("audit-log/", AuditLogListView.as_view(), name="audit-log"),
     path("audit-log/export/", AuditLogExportView.as_view(), name="audit-log-export"),
     path("break-attestation/", BreakAttestationView.as_view(), name="break-attestation"),
