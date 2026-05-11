@@ -51,6 +51,7 @@ TENANT_DOMAIN_MODEL = "companies.Domain"
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",          # MUST be first to handle CORS preflight
     "django_tenants.middleware.main.TenantMainMiddleware",
+    "django.middleware.gzip.GZipMiddleware",          # Compress responses
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

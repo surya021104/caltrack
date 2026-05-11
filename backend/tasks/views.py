@@ -16,12 +16,15 @@ class IsAdmin(IsAuthenticated):
 
 # ── Admin: full CRUD ──────────────────────────────────────────
 
-class AdminTaskListCreateView(APIView):
+from rest_framework.generics import GenericAPIView
+
+class AdminTaskListCreateView(GenericAPIView):
     """
     GET  /api/tasks/admin/          → list all tasks (admin)
     POST /api/tasks/admin/          → create & assign a task (admin)
     """
     permission_classes = [IsAdmin]
+    serializer_class = TaskSerializer
 
     def get(self, request):
         if not hasattr(request, 'company'):
@@ -39,6 +42,11 @@ class AdminTaskListCreateView(APIView):
             qs = qs.filter(status=status_f)
         if due_date:
             qs = qs.filter(due_date=due_date)
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
 
         return Response(TaskSerializer(qs, many=True).data)
 
@@ -114,11 +122,12 @@ class AdminTaskAttachmentCreateView(APIView):
 
 # ── Employee: own tasks ───────────────────────────────────────
 
-class EmployeeTaskListView(APIView):
+class EmployeeTaskListView(GenericAPIView):
     """
     GET /api/tasks/my/              → list tasks assigned to current user
     """
     permission_classes = [IsAuthenticated]
+    serializer_class = TaskSerializer
 
     def get(self, request):
         if not hasattr(request, 'company'):
@@ -127,6 +136,12 @@ class EmployeeTaskListView(APIView):
         status_f = request.query_params.get("status")
         if status_f:
             qs = qs.filter(status=status_f)
+            
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+            
         return Response(TaskSerializer(qs, many=True).data)
 
 

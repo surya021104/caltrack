@@ -3,13 +3,16 @@
  * Uses face-api.js to compare clock-in and clock-out selfies
  * in the browser before allowing clock-out.
  */
-import * as faceapi from "face-api.js"
+let faceapi = null;
 
 let modelsLoaded = false
 
 export async function loadFaceModels() {
   if (modelsLoaded) return true
   try {
+    if (!faceapi) {
+      faceapi = await import("face-api.js")
+    }
     const MODEL_URL = "/models"
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),

@@ -40,8 +40,9 @@ class EmployeeLocation(models.Model):
     class Meta:
         ordering = ["-timestamp"]
         indexes = [
-            models.Index(fields=["employee", "timestamp"]),
-            models.Index(fields=["time_log"]),
+            models.Index(fields=['employee', 'timestamp']),
+            models.Index(fields=['time_log', 'timestamp']),
+            models.Index(fields=['time_log']),
         ]
 
     def __str__(self):

@@ -1,397 +1,594 @@
-import { useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
 import { useAuth } from "../../state/auth/useAuth.js"
 import { extractAuthError } from "../../api/authService.js"
-import { validateLoginForm, validateRegStep1, validateRegStep2 } from "../../utils/validate.js"
+import { validateLoginForm } from "../../utils/validate.js"
 import { routes } from "../routes.js"
 import { useGoogleLogin } from "@react-oauth/google"
 import { CalTrackLogo } from "../components/CalTrackLogo.jsx"
-import { Check, ArrowRight, Building2, Users2, Workflow, Clock, Banknote, CalendarDays, Sparkles, RefreshCcw, ShieldCheck, AlertCircle } from "lucide-react"
+import { RefreshCcw, AlertCircle, Eye, EyeOff, Mail, Lock, X, ArrowRight, Check, User, Globe, Users, ShieldCheck, Apple } from "lucide-react"
 
-/* ──────────────────────────────────────────────
-   REVIEW DATA
-   ────────────────────────────────────────────── */
-const REVIEWS = [
-  {
-    quote: "As a remote team lead, QuickTIMS has been a game-changer for attendance and payroll. The real-time tracking and selfie verification give us complete confidence.",
-    author: "Priya Mehra",
-    role: "HR Manager, TechNova Solutions",
-    stars: 5,
-  },
-  {
-    quote: "We switched from a spreadsheet-based system and QuickTIMS cut our payroll processing time in half. The scheduling feature is absolutely top-notch.",
-    author: "Arjun Krishnaswamy",
-    role: "Operations Director, Apex Industries",
-    stars: 5,
-  },
-  {
-    quote: "Finally a time-tracking tool that works for SMEs. Simple, reliable, and the geolocation punch-in keeps everyone accountable. Highly recommended!",
-    author: "Sneha Patel",
-    role: "CEO, Bright Retail Group",
-    stars: 5,
-  },
+/* ─── Card dimensions ─── */
+const CW = 200
+const CH = 130
+
+/* ─── Card grid layout — 4 columns x 3 rows, centered in visible area ─── */
+const CARDS = [
+  // Row 1 (top)
+  { id: 1,  src: "/mockups/caltrack_dashboard_mockup_1778231495839.png",  x: -250, y: -150, z: 80,  r: -6,
+    title: "Executive Dashboard",
+    desc: "1. Real-time KPI overview with productivity scores\n2. Total labor cost tracking across departments\n3. Employee engagement metrics with trend analysis\n4. Active headcount monitoring per location\n5. Monthly labor cost trend with bar & line charts\n6. Productivity score distribution (donut chart)\n7. AI-driven anomaly detection alerts\n8. Top productive teams ranking table\n9. Department-wise cost breakdown\n10. One-click drill-down into any metric" },
+  { id: 2,  src: "/mockups/caltrack_scheduling_mockup_1778231584856.png",  x:  -80, y: -160, z: 50,  r:  4,
+    title: "Smart Scheduling",
+    desc: "1. Drag-and-drop shift assignment calendar\n2. Auto-fill shifts based on availability rules\n3. Overtime threshold alerts & compliance flags\n4. Shift swap requests with manager approval\n5. Break scheduling with labor law compliance\n6. Multi-location coverage visualization\n7. Skills-based shift matching engine\n8. Recurring schedule templates\n9. Real-time understaffing notifications\n10. Export schedules to PDF or calendar sync" },
+  { id: 3,  src: "/mockups/caltrack_live_map_mockup_1778231560076.png",    x:   80, y: -145, z: 70,  r: -3,
+    title: "Live Tracking Map",
+    desc: "1. Real-time GPS tracking of field employees\n2. Geofenced work zones with entry/exit alerts\n3. Route history playback for each worker\n4. Active employee count per zone\n5. Speed and movement status indicators\n6. Site boundary polygon editor\n7. Employee activity feed with timestamps\n8. Satellite and road map toggle views\n9. Restricted zone violation notifications\n10. Multi-site dashboard with zone summaries" },
+  { id: 4,  src: "/mockups/caltrack_mobile_app_mockup_1778231517495.png",  x:  250, y: -155, z: 40,  r:  8,
+    title: "Mobile Field App",
+    desc: "1. Geolocation-based punch in/out\n2. Selfie verification at clock-in\n3. Weekly timesheet with daily hours\n4. Current week total and pending approvals\n5. Geolocation map with red pin for HQ\n6. Face verification capture & validation\n7. Activity feed with task assignments\n8. Break timer with auto-deduction\n9. Push notifications for schedule changes\n10. Offline mode with auto-sync on reconnect" },
+  // Row 2 (middle)
+  { id: 5,  src: "/mockups/caltrack_analytics_mockup_1778231608789.png",   x: -220, y:    0, z: 60,  r:  5,
+    title: "Workforce Analytics",
+    desc: "1. Attendance trend analysis over 12 months\n2. Department-level productivity heatmap\n3. Overtime distribution across teams\n4. Late arrival pattern detection\n5. Leave utilization rate by category\n6. Cost-per-employee benchmarking\n7. Predictive staffing recommendations\n8. Custom date range filtering\n9. Export reports to Excel/PDF\n10. Scheduled report email delivery" },
+  { id: 6,  src: "/mockups/caltrack_payroll_mockup_1778231538875.png",     x:  -60, y:   10, z: 90,  r: -4,
+    title: "Payroll Processing",
+    desc: "1. Automated payroll calculation from timesheets\n2. Tax deduction and compliance engine\n3. Overtime rate multiplier configuration\n4. Department-wise salary breakdown\n5. Bonus and incentive management\n6. Payslip generation with PDF export\n7. Bank transfer file generation\n8. Year-to-date earnings summary\n9. Multi-currency support for global teams\n10. Audit trail for all payroll changes" },
+  { id: 7,  src: "/mockups/caltrack_dashboard_mockup_1778231495839.png",   x:  100, y:   -5, z: 30,  r:  3,
+    title: "Performance Overview",
+    desc: "1. Individual employee performance scores\n2. Team comparison leaderboards\n3. Goal tracking with progress bars\n4. Performance review cycle management\n5. 360-degree feedback collection\n6. Skill gap analysis visualization\n7. Training completion tracking\n8. Monthly performance trend lines\n9. Manager notes and action items\n10. Integration with HR systems" },
+  { id: 8,  src: "/mockups/caltrack_live_map_mockup_1778231560076.png",    x:  260, y:    5, z: 55,  r: -7,
+    title: "Zone Management",
+    desc: "1. Custom geofence zone creation\n2. Multi-polygon boundary drawing\n3. Zone-based attendance rules\n4. Entry/exit time logging per zone\n5. Restricted area access control\n6. Zone capacity monitoring\n7. Historical zone activity reports\n8. Alert configuration per zone\n9. Integration with access control systems\n10. Zone-wise labor cost allocation" },
+  // Row 3 (bottom)
+  { id: 9,  src: "/mockups/caltrack_mobile_app_mockup_1778231517495.png",  x: -240, y:  150, z: 35,  r:  6,
+    title: "Employee Self-Service",
+    desc: "1. Personal profile and document management\n2. Leave request submission with calendar\n3. Timesheet review and approval status\n4. Expense claim submission with receipts\n5. Team directory with org chart\n6. Company announcements feed\n7. Benefits enrollment dashboard\n8. Training module access\n9. Helpdesk ticket creation\n10. Personal analytics and hours summary" },
+  { id: 10, src: "/mockups/caltrack_scheduling_mockup_1778231584856.png",  x:  -70, y:  155, z: 65,  r: -5,
+    title: "Shift Planning",
+    desc: "1. Weekly and monthly shift calendar views\n2. Employee availability preferences\n3. Conflict detection and resolution\n4. Minimum rest period enforcement\n5. Holiday and leave integration\n6. Cost optimization suggestions\n7. Bulk shift assignment tools\n8. Notification to employees on changes\n9. Coverage gap highlighting\n10. Historical shift pattern analytics" },
+  { id: 11, src: "/mockups/caltrack_payroll_mockup_1778231538875.png",     x:   90, y:  145, z: 45,  r:  4,
+    title: "Compensation Reports",
+    desc: "1. Comprehensive salary reports by department\n2. Overtime cost analysis and trends\n3. Benefits cost per employee tracking\n4. Tax liability forecasting\n5. Budget vs actual labor cost comparison\n6. Compensation band analysis\n7. Equal pay audit reports\n8. Contractor vs employee cost analysis\n9. Annual compensation review tools\n10. Custom report builder with filters" },
+  { id: 12, src: "/mockups/caltrack_analytics_mockup_1778231608789.png",   x:  240, y:  160, z: 75,  r: -8,
+    title: "Insights Engine",
+    desc: "1. AI-powered workforce trend predictions\n2. Attrition risk scoring per employee\n3. Engagement survey result analysis\n4. Absenteeism pattern recognition\n5. Seasonal demand forecasting\n6. Cost saving opportunity identification\n7. Benchmark against industry standards\n8. Custom KPI dashboard builder\n9. Real-time data pipeline monitoring\n10. Automated insight notifications" },
 ]
 
-/* ──────────────────────────────────────────────
-   STAR RATING
-   ────────────────────────────────────────────── */
-function Stars({ count = 5 }) {
+/* ─── HOLOGRAPHIC CARD ─── */
+function HoloCard({ card, index, onSelect }) {
   return (
-    <div className="flex gap-1">
-      {Array.from({ length: count }).map((_, i) => (
-        <span key={i} className="text-amber-400 text-lg">★</span>
-      ))}
-    </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{
+        duration: 0.8,
+        delay: 0.05 + index * 0.04,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      style={{
+        position: "absolute",
+        width: CW,
+        height: CH,
+        left: `calc(50% - ${CW / 2}px)`,
+        top: `calc(50% - ${CH / 2}px)`,
+        x: card.x,
+        y: card.y,
+        zIndex: card.z + 300,
+        rotate: card.r,
+        contain: "layout style paint",
+        willChange: "transform",
+      }}
+      className="cursor-pointer"
+      onClick={() => onSelect(card)}
+      whileHover={{
+        scale: 1.12,
+        zIndex: 999,
+        rotate: 0,
+        transition: { type: "spring", stiffness: 400, damping: 25 },
+      }}
+      whileTap={{ scale: 0.97 }}
+    >
+      <div className="w-full h-full rounded-2xl overflow-hidden bg-white/90 border border-white/50 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.1)]">
+        <img
+          src={card.src}
+          alt=""
+          draggable={false}
+          loading="lazy"
+          className="w-full h-full object-cover select-none pointer-events-none"
+        />
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/30 via-transparent to-transparent pointer-events-none" />
+      </div>
+    </motion.div>
   )
 }
 
-/* ──────────────────────────────────────────────
-   REVIEW CAROUSEL
-   ────────────────────────────────────────────── */
-function ReviewCarousel({ lightMode = false }) {
-  const [current, setCurrent] = useState(0)
-  const timerRef = useRef(null)
-
-  function goTo(idx) {
-    setCurrent((idx + REVIEWS.length) % REVIEWS.length)
-  }
-
-  function resetTimer() {
-    clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => setCurrent(p => (p + 1) % REVIEWS.length), 5000)
-  }
-
-  useEffect(() => {
-    resetTimer()
-    return () => clearInterval(timerRef.current)
-  }, [])
-
-  function handlePrev() { goTo(current - 1); resetTimer() }
-  function handleNext() { goTo(current + 1); resetTimer() }
-  function handleDot(i) { goTo(i); resetTimer() }
-
-  const review = REVIEWS[current]
-
-  return (
-    <div className="w-full max-w-md mt-auto mb-8 animate-in slide-in-from-left-4 duration-500">
-      <div className={`rounded-3xl p-8 shadow-2xl backdrop-blur-sm ${lightMode ? 'bg-white/95 border-none' : 'bg-white/10 border border-white/20'}`}>
-        <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6 shadow-sm">
-          <Sparkles size={28} />
-        </div>
-        <h3 className="text-lg font-black text-slate-900 mb-2 tracking-tight">Trusted by Industry Leaders</h3>
-        <p className={`text-sm font-medium leading-relaxed mb-8 ${lightMode ? 'text-slate-500' : 'text-indigo-200'}`}>"{review.quote}"</p>
-        
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-            <div className="w-10 h-10 rounded-xl bg-white text-indigo-600 flex items-center justify-center font-black shadow-sm">
-              {review.author.charAt(0)}
-            </div>
-            <div>
-              <div className="text-sm font-black text-slate-900">{review.author}</div>
-              <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{review.role}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-center gap-4 mt-8">
-        <button className="text-indigo-200 hover:text-white transition-colors" onClick={handlePrev} aria-label="Previous review">
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <div className="flex gap-2">
-          {REVIEWS.map((_, i) => (
-            <button
-              key={i}
-              className={`w-2 h-2 rounded-full transition-all ${i === current ? "bg-white w-6" : "bg-indigo-300/50 hover:bg-indigo-300"}`}
-              onClick={() => handleDot(i)}
-              aria-label={`Review ${i + 1}`}
-            />
-          ))}
-        </div>
-        <button className="text-indigo-200 hover:text-white transition-colors" onClick={handleNext} aria-label="Next review">
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function GoogleConnectButton({ onLoginWithGoogle, onError, onDone, onNavigate, postLoginRoute }) {
-  const googleLoginHandler = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      onDone(false)
-      try {
-        await onLoginWithGoogle(tokenResponse.access_token)
-        onNavigate(postLoginRoute())
-      } catch (err) {
-        onError(err?.body?.detail || "Google login failed.")
-      } finally {
-        onDone(true)
-      }
+/* ─── GOOGLE LOGIN ─── */
+function GoogleLoginButton({ onLogin, onError, onLoadingChange, navigate, postLoginRoute }) {
+  const handler = useGoogleLogin({
+    onSuccess: async (tr) => {
+      onLoadingChange(true)
+      try { await onLogin(tr.access_token); navigate(postLoginRoute()) }
+      catch (err) { onError(err?.body?.detail || "Google login failed.") }
+      finally { onLoadingChange(false) }
     },
     onError: () => onError("Google login failed.")
   })
-
   return (
-    <button 
-      className="flex items-center justify-center gap-2 w-full px-3 py-3.5 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all"
-      type="button" 
-      onClick={() => googleLoginHandler()}
-    >
-      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-        <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.7-6.7C35.4 2.2 30.1 0 24 0 14.8 0 6.9 5.4 3.1 13.3l7.8 6.1C13 13.1 18 9.5 24 9.5z" />
-        <path fill="#4285F4" d="M46.6 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3.1-2.4 5.7-5 7.4l7.7 6c4.5-4.1 7.2-10.2 7.2-17.7z" />
-        <path fill="#FBBC05" d="M10.9 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.5 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.5 10.7l8.4-6.1z" />
-        <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.5l-7.7-6c-2 1.4-4.6 2.2-7.2 2.2-5.9 0-11-4-12.8-9.4l-8 6.1C6.9 42.6 14.8 48 24 48z" />
+    <button onClick={() => handler()} className="flex items-center justify-center gap-3 w-full px-6 py-4 bg-white border border-[#E2E8F0] rounded-2xl text-[14px] font-bold text-[#334155] hover:bg-[#F8FAFF] hover:border-indigo-200 transition-all shadow-sm">
+      <svg width="20" height="20" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.7-6.7C35.4 2.2 30.1 0 24 0 14.8 0 6.9 5.4 3.1 13.3l7.8 6.1C13 13.1 18 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.6 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3.1-2.4 5.7-5 7.4l7.7 6c4.5-4.1 7.2-10.2 7.2-17.7z"/>
+        <path fill="#FBBC05" d="M10.9 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.5 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.5 10.7l8.4-6.1z"/>
+        <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.5l-7.7-6c-2 1.4-4.6 2.2-7.2 2.2-5.9 0-11-4-12.8-9.4l-8 6.1C6.9 42.6 14.8 48 24 48z"/>
       </svg>
-      Google
+      Continue with Google
     </button>
   )
 }
 
-function GooglePlaceholderButton({ onClick }) {
-  return (
-    <button 
-      className="flex items-center justify-center gap-2 w-full px-3 py-3.5 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all"
-      type="button" 
-      onClick={onClick} 
-      aria-disabled="true"
-    >
-      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-        <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.7-6.7C35.4 2.2 30.1 0 24 0 14.8 0 6.9 5.4 3.1 13.3l7.8 6.1C13 13.1 18 9.5 24 9.5z" />
-        <path fill="#4285F4" d="M46.6 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3.1-2.4 5.7-5 7.4l7.7 6c4.5-4.1 7.2-10.2 7.2-17.7z" />
-        <path fill="#FBBC05" d="M10.9 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.5 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.5 10.7l8.4-6.1z" />
-        <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.5l-7.7-6c-2 1.4-4.6 2.2-7.2 2.2-5.9 0-11-4-12.8-9.4l-8 6.1C6.9 42.6 14.8 48 24 48z" />
-      </svg>
-      Google
-    </button>
-  )
-}
-
-/* ──────────────────────────────────────────────
-   MAIN LOGIN PAGE
-   ────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════
+   MAIN — LoginPage
+   ═══════════════════════════════════════════════════════════════════ */
 export function LoginPage() {
   const { login, loginWithGoogle, register } = useAuth()
   const navigate = useNavigate()
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
-  const postLoginRoute = () => routes.get_started
-
   const [mode, setMode] = useState("signin")
-  const [success, setSuccess] = useState("")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
+  const [orgName, setOrgName] = useState("")
+  const [numEmployees, setNumEmployees] = useState("1 - 10 employees")
+  const [regStep, setRegStep] = useState(1)
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [organizationName, setOrganizationName] = useState("")
-  const [robot, setRobot] = useState(false)
-  const [agree1, setAgree1] = useState(true)
-  const [agree2, setAgree2] = useState(false)
-  const [regStep, setRegStep] = useState(1)
-  const [teamSize, setTeamSize] = useState("1 - 10 employees")
-  const [selectedModules, setSelectedModules] = useState(["time"])
+  const [selected, setSelected] = useState(null)
+  const [agreedUpdates, setAgreedUpdates] = useState(true)
+  const [agreedTerms, setAgreedTerms] = useState(false)
 
-  function changeMode(m) {
-    setMode(m)
-    setError("")
-    setSuccess("")
-    setRegStep(1)
-  }
+  const postLoginRoute = () => routes.DASHBOARDget_started
 
   async function onSubmit(e) {
     if (e) e.preventDefault()
     if (loading) return
     setError("")
-    setSuccess("")
-
     if (mode === "signin") {
-      const validationError = validateLoginForm({ identifier: username, password })
-      if (validationError) return setError(validationError)
+      const ve = validateLoginForm({ identifier: username, password })
+      if (ve) return setError(ve)
       setLoading(true)
-      try {
-        await login(username.trim(), password)
-        navigate(postLoginRoute(), { replace: true })
-      } catch (err) {
-        setError(extractAuthError(err, "Login failed. Check your credentials."))
-      } finally {
-        setLoading(false)
-      }
+      try { await login(username.trim(), password); navigate(postLoginRoute(), { replace: true }) }
+      catch (err) { setError(extractAuthError(err, "Login failed.")) }
+      finally { setLoading(false) }
     } else {
-      if (!robot) return setError("Please confirm you are not a robot.")
-      if (!agree2) return setError("Please agree to the Terms & Privacy Policy.")
       setLoading(true)
       try {
         const [first, ...rest] = fullName.trim().split(" ")
-        await register({
-          username: username.trim(),
-          password,
-          email: email.trim(),
-          first_name: first || "",
-          last_name: rest.join(" ") || "",
-          organization_name: organizationName.trim(),
-          team_size: teamSize,
-          selected_modules: selectedModules,
-        })
+        await register({ username: username.trim(), password, email: email.trim(), first_name: first || "", last_name: rest.join(" ") || "", organization_name: orgName.trim() })
         navigate(postLoginRoute(), { replace: true })
-      } catch (err) {
-        setError(extractAuthError(err, "Registration failed."))
-      } finally {
-        setLoading(false)
-      }
+      } catch (err) { setError(extractAuthError(err, "Registration failed.")) }
+      finally { setLoading(false) }
     }
   }
 
+  /* ═══════════════════════════════ JSX ═══════════════════════════════ */
   return (
     <div className="flex min-h-screen bg-white font-sans overflow-hidden">
-      
-      {/* ── LEFT PANEL (Branding) ── */}
-      <div className="hidden lg:flex flex-col w-1/2 bg-white p-16 relative border-r border-slate-100">
-        <div className="mb-16 animate-in fade-in slide-in-from-top-4 duration-700">
-          <CalTrackLogo size="lg" showTagline={false} />
-          <div className="flex items-center gap-3 mt-4">
-            <span className="px-3 py-1 bg-slate-100 text-slate-900 text-[10px] font-black uppercase tracking-widest rounded-full border border-slate-200">CHRONOFLOW</span>
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">• Workforce Time Suite</span>
-          </div>
-        </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in-95 duration-1000">
-          <div className="w-full max-w-md aspect-video bg-slate-50 rounded-[3rem] flex items-center justify-center mb-12 relative overflow-hidden shadow-inner">
-             <div className="absolute inset-0 opacity-30 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:32px:32px]"></div>
-             <div className="relative z-10 w-28 h-28 bg-white rounded-3xl shadow-2xl shadow-indigo-100 flex items-center justify-center animate-bounce duration-[3000ms]">
-                <Clock className="text-indigo-600" size={48} />
-             </div>
-             <div className="absolute right-20 top-12 w-14 h-14 bg-emerald-500 rounded-2xl shadow-xl flex items-center justify-center rotate-12">
-                <Check className="text-white" size={28} strokeWidth={4} />
-             </div>
-          </div>
+      {/* ═══════════════════ LEFT PANEL — 60 % ═══════════════════ */}
+      <div className="hidden lg:flex flex-col w-[60%] bg-[#FDFDFF] relative border-r border-[#F1F5F9] overflow-hidden">
+
+        {/* Golden Glow Gradient Background */}
+        <div 
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: "radial-gradient(125% 125% at 50% 10%, #ffffff 40%, #fbbf24 100%)",
+            backgroundSize: "100% 100%",
+          }}
+        />
+        
+        <div className="absolute inset-0 pointer-events-none">
           
-          <h2 className="text-3xl font-black text-slate-900 max-w-md leading-tight mb-4 tracking-tight">
-            Track when your staff are at work for payroll, attendance, compliance.
-          </h2>
-          <p className="text-indigo-600 text-base font-black uppercase tracking-widest">
-            Thousands of users worldwide, from SME to Enterprise
-          </p>
+          {/* Animated Field Tracking Network */}
+          <div className="absolute inset-0 overflow-hidden opacity-[0.2]">
+            <svg width="100%" height="100%" className="absolute inset-0">
+              <defs>
+                <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#4338CA" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#4338CA" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              
+              {/* Animated Connection Lines */}
+              {[...Array(6)].map((_, i) => (
+                <motion.line
+                  key={`line-${i}`}
+                  x1={`${10 + i * 15}%`} y1={`${20 + (i % 3) * 25}%`}
+                  x2={`${25 + i * 12}%`} y2={`${45 + (i % 2) * 30}%`}
+                  stroke="#4338CA" strokeWidth="0.5" strokeDasharray="4 8"
+                  animate={{ strokeDashoffset: [0, -40], opacity: [0.1, 0.3, 0.1] }}
+                  transition={{ duration: 10 + i * 2, repeat: Infinity, ease: "linear" }}
+                />
+              ))}
+
+              {/* Pulsing Tracking Nodes */}
+              {[...Array(8)].map((_, i) => (
+                <motion.circle
+                  key={`node-${i}`}
+                  cx={`${15 + i * 10}%`} cy={`${25 + (i % 4) * 15}%`}
+                  r="3" fill="url(#nodeGlow)"
+                  animate={{ 
+                    scale: [1, 1.5, 1], 
+                    opacity: [0.3, 0.7, 0.3],
+                    x: [0, 15, 0],
+                    y: [0, 20, 0]
+                  }}
+                  transition={{ 
+                    duration: 12 + i * 3, 
+                    repeat: Infinity, 
+                    ease: "easeInOut",
+                    delay: i * 0.5 
+                  }}
+                />
+              ))}
+            </svg>
+          </div>
+
+          {/* 3D Rotating Wireframe Cube */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-[0.04]" style={{ perspective: "1200px" }}>
+            <motion.div
+              animate={{ rotateY: 360, rotateX: [0, 20, 0] }}
+              transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+              style={{ transformStyle: "preserve-3d", width: "400px", height: "400px" }}
+              className="relative"
+            >
+              {/* Cube Faces (Wireframe) */}
+              {[
+                { rY: 0, z: 200 }, { rY: 90, z: 200 }, { rY: 180, z: 200 }, 
+                { rY: 270, z: 200 }, { rX: 90, z: 200 }, { rX: -90, z: 200 }
+              ].map((face, i) => (
+                <div
+                  key={`face-${i}`}
+                  className="absolute inset-0 border border-indigo-500/40"
+                  style={{
+                    transform: `rotateY(${face.rY || 0}deg) rotateX(${face.rX || 0}deg) translateZ(${face.z}px)`,
+                    backgroundImage: "linear-gradient(45deg, transparent 45%, rgba(67, 56, 202, 0.1) 50%, transparent 55%)",
+                    backgroundSize: "20px 20px"
+                  }}
+                />
+              ))}
+              
+              {/* Inner floating nodes */}
+              {[...Array(4)].map((_, i) => (
+                <motion.div
+                  key={`inner-${i}`}
+                  animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 5 + i, repeat: Infinity }}
+                  className="absolute w-4 h-4 bg-indigo-400 rounded-full blur-md"
+                  style={{ 
+                    top: `${20 + i * 20}%`, 
+                    left: `${20 + (i % 2) * 40}%`,
+                    transform: "translateZ(100px)"
+                  }}
+                />
+              ))}
+            </motion.div>
+          </div>
+
+          <div
+            className="absolute inset-0 opacity-[0.015]"
+            style={{ backgroundImage: "radial-gradient(#4338CA 2px, transparent 2px)", backgroundSize: "80px 80px" }}
+          />
         </div>
 
-        <div className="mt-auto">
-          <ReviewCarousel lightMode={true} />
-        </div>
+        {/* Logo */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="relative z-50 flex justify-center pt-14 pb-2"
+        >
+          <CalTrackLogo size="lg" showTagline={false} />
+        </motion.div>
+
+        {/* ── 3D Stage ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 40, filter: "blur(8px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          transition={{ duration: 1.6, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="relative flex-1"
+          style={{ perspective: "2500px", transformStyle: "preserve-3d" }}
+        >
+          <div className="absolute inset-0">
+            {CARDS.map((card, i) => (
+              <HoloCard
+                key={card.id}
+                card={card}
+                index={i}
+                onSelect={setSelected}
+              />
+            ))}
+          </div>
+        </motion.div>
+
+        {/* ── Full-screen Preview Modal ── */}
+        <AnimatePresence>
+          {selected && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                key="backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0 z-[1999] bg-white/30 backdrop-blur-2xl"
+                onClick={() => setSelected(null)}
+              />
+
+              {/* Preview — fills entire left panel */}
+              <motion.div
+                key="preview"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 z-[2000] flex flex-col bg-[#0B1120]"
+                onClick={() => setSelected(null)}
+              >
+                {/* Title bar */}
+                <div className="px-8 py-4 bg-gradient-to-r from-[#0F172A] to-[#1E293B] flex items-center justify-between shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <h2 className="text-white text-lg font-bold tracking-tight">{selected.title}</h2>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="bg-white/10 hover:bg-white/20 rounded-full p-2 text-white transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Image — covers full length */}
+                <div className="flex-1 min-h-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                  <img
+                    src={selected.src}
+                    alt={selected.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                {/* Workflow description — compact glass overlay */}
+                <div className="absolute bottom-0 inset-x-0 px-8 py-6 bg-black/60 backdrop-blur-md border-t border-white/10 shrink-0 overflow-y-auto max-h-[35%]" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-white/50 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Workflow</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+                    {selected.desc.split("\n").map((line, i) => (
+                      <p key={i} className="flex gap-2 text-white/80 text-[11px] leading-tight font-medium">
+                        <span className="text-indigo-400 font-bold shrink-0">{line.split('. ')[0]}.</span>
+                        <span>{line.split('. ').slice(1).join('. ')}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ── RIGHT PANEL (Auth Container) ── */}
-      <div className="flex-1 relative flex flex-col justify-center items-center p-8 bg-white">
-        <div className="w-full max-w-[480px] relative z-10 animate-in fade-in slide-in-from-right-8 duration-700">
-          
-          {/* Mode Switcher */}
-          <div className="flex bg-slate-50 p-1.5 rounded-2xl mb-12 border border-slate-100">
-            <button
-              onClick={() => changeMode("signin")}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === "signin" ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+      {/* ═══════════════════ RIGHT PANEL — 40 % ═══════════════════ */}
+      <div className="flex-1 flex flex-col justify-center items-center p-8 lg:p-12 bg-white overflow-y-auto">
+        <div className="w-full max-w-[440px]">
+
+          {/* Toggle Sign In / Create Account */}
+          <div className="flex bg-[#F8FAFC] p-1.5 rounded-2xl mb-12 border border-[#F1F5F9] shadow-sm max-w-[320px] mx-auto">
+            <button 
+              onClick={() => { setMode("signin"); setError(""); setRegStep(1) }} 
+              className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${mode === "signin" ? "bg-white text-indigo-600 shadow-md shadow-indigo-100/50 border border-indigo-50/50" : "text-[#94A3B8]"}`}
             >
               Sign In
             </button>
-            <button
-              onClick={() => changeMode("register")}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mode === "register" ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            <button 
+              onClick={() => { setMode("register"); setError(""); setRegStep(1) }} 
+              className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${mode === "register" ? "bg-white text-indigo-600 shadow-md shadow-indigo-100/50 border border-indigo-50/50" : "text-[#94A3B8]"}`}
             >
               Create Account
             </button>
           </div>
 
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-              {mode === "signin" ? "Welcome back" : "Create a new account"}
-            </h2>
+          <div className="text-center mb-10">
+            <h1 className="text-[32px] font-black text-[#0F172A] leading-tight tracking-tight">
+              {mode === "signin" ? "Welcome Back" : "Create a new account"}
+            </h1>
           </div>
 
-          <div className="text-center mb-4">
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Connect with</span>
-          </div>
-          <div className="grid grid-cols-3 gap-3 mb-12">
-            {googleClientId ? (
-              <GoogleConnectButton onLoginWithGoogle={loginWithGoogle} onError={setError} onDone={(done) => setLoading(!done)} onNavigate={navigate} postLoginRoute={postLoginRoute} />
-            ) : (
-              <GooglePlaceholderButton onClick={() => setError("Identity provider offline.")} />
-            )}
-            <button className="flex items-center justify-center gap-2 w-full px-3 py-3.5 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all">
-              <svg width="16" height="16" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
-              Microsoft
-            </button>
-            <button className="flex items-center justify-center gap-2 w-full px-3 py-3.5 bg-white border border-slate-100 rounded-2xl text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all">
-              <svg width="16" height="16" viewBox="0 0 384 512" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-              Apple
-            </button>
+          {/* Connect With Buttons */}
+          <div className="mb-8">
+            <p className="text-center text-[10px] font-black text-[#94A3B8] uppercase tracking-[0.2em] mb-4">Connect With</p>
+            <div className="grid grid-cols-3 gap-3">
+              <button className="flex items-center justify-center py-4 px-2 border border-[#F1F5F9] rounded-2xl hover:bg-[#F8FAFC] transition-all group">
+                <svg width="18" height="18" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.5 0 6.5 1.2 8.9 3.2l6.7-6.7C35.4 2.2 30.1 0 24 0 14.8 0 6.9 5.4 3.1 13.3l7.8 6.1C13 13.1 18 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.6 24.5c0-1.6-.1-3.2-.4-4.7H24v9h12.7c-.6 3.1-2.4 5.7-5 7.4l7.7 6c4.5-4.1 7.2-10.2 7.2-17.7z"/>
+                  <path fill="#FBBC05" d="M10.9 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.5 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.5 10.7l8.4-6.1z"/>
+                  <path fill="#34A853" d="M24 48c6.1 0 11.2-2 14.9-5.5l-7.7-6c-2 1.4-4.6 2.2-7.2 2.2-5.9 0-11-4-12.8-9.4l-8 6.1C6.9 42.6 14.8 48 24 48z"/>
+                </svg>
+                <span className="hidden lg:block ml-2 text-[10px] font-black uppercase text-[#475569]">Google</span>
+              </button>
+              <button className="flex items-center justify-center py-4 px-2 border border-[#F1F5F9] rounded-2xl hover:bg-[#F8FAFC] transition-all">
+                <svg width="18" height="18" viewBox="0 0 23 23">
+                  <path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/>
+                </svg>
+                <span className="hidden lg:block ml-2 text-[10px] font-black uppercase text-[#475569]">Microsoft</span>
+              </button>
+              <button className="flex items-center justify-center py-4 px-2 border border-[#F1F5F9] rounded-2xl hover:bg-[#F8FAFC] transition-all">
+                <Apple size={18} className="text-black" />
+                <span className="hidden lg:block ml-2 text-[10px] font-black uppercase text-[#475569]">Apple</span>
+              </button>
+            </div>
           </div>
 
-          <div className="relative flex items-center mb-12">
-            <div className="flex-grow border-t border-slate-100"></div>
-            <span className="flex-shrink-0 mx-6 text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">or</span>
-            <div className="flex-grow border-t border-slate-100"></div>
+          <div className="relative flex items-center mb-8">
+            <div className="flex-grow border-t border-[#F1F5F9]" />
+            <span className="mx-4 text-[10px] font-black text-[#CBD5E1] tracking-[0.3em]">OR</span>
+            <div className="flex-grow border-t border-[#F1F5F9]" />
           </div>
-
-          {mode === "signin" && (
-            <form onSubmit={onSubmit} className="space-y-6">
-              <input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[1.5rem] text-sm font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:border-indigo-600 outline-none transition-all" placeholder="Username or Email" value={username} onChange={e => setUsername(e.target.value)} />
-              <div className="relative">
-                <input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-[1.5rem] text-sm font-bold text-slate-900 placeholder-slate-400 focus:bg-white focus:border-indigo-600 outline-none transition-all" type={showPass ? "text" : "password"} placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-                <button type="button" className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 hover:text-indigo-600 uppercase tracking-widest" onClick={() => setShowPass(p => !p)}>{showPass ? "Hide" : "Show"}</button>
-              </div>
-              {error && <div className="p-5 bg-red-50 text-red-600 text-xs font-bold rounded-2xl border border-red-100">{error}</div>}
-              <button type="submit" className="w-full py-6 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[1.5rem] shadow-2xl shadow-indigo-100 transition-all active:scale-[0.98]" disabled={loading}>{loading ? "Authenticating..." : "Access Workspace"}</button>
-            </form>
-          )}
 
           {mode === "register" && (
-            <div className="space-y-8">
-              <div className="flex items-center justify-center gap-0">
-                {[1, 2, 3, 4].map(s => (
-                  <div key={s} className="flex items-center flex-1 last:flex-none">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all relative z-10 ${regStep >= s ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'}`}>
-                      {regStep > s ? <Check size={18} strokeWidth={4} /> : (regStep === s ? <div className="w-2 h-2 bg-white rounded-full" /> : <span className="text-[10px] font-black">{s}</span>)}
-                    </div>
-                    {s !== 4 && <div className={`flex-1 h-[3px] transition-all ${regStep > s ? 'bg-emerald-500' : 'bg-indigo-100'}`} />}
-                  </div>
-                ))}
-              </div>
-
-              {regStep < 4 ? (
-                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight">{regStep === 1 ? "Personal Details" : regStep === 2 ? "Organization Info" : "Platform Credentials"}</h3>
-                    {regStep === 1 && <><input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold" placeholder="Full Name" value={fullName} onChange={e => setFullName(e.target.value)} /><input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold" placeholder="Work Email" value={email} onChange={e => setEmail(e.target.value)} /></>}
-                    {regStep === 2 && <><input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold" placeholder="Organization Name" value={organizationName} onChange={e => setOrganizationName(e.target.value)} /><select className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold appearance-none" value={teamSize} onChange={e => setTeamSize(e.target.value)}><option>1 - 10 employees</option><option>11 - 50 employees</option><option>51 - 200 employees</option><option>201+ employees</option></select></>}
-                    {regStep === 3 && <><input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} /><input className="w-full px-8 py-5 bg-slate-50 border border-slate-100 rounded-3xl text-sm font-bold" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} /></>}
-                    <div className="flex gap-4 mt-10">
-                       <button onClick={() => setRegStep(p => p - 1)} className="flex-1 py-5 bg-slate-50 text-slate-400 text-[11px] font-black uppercase tracking-widest rounded-3xl" disabled={regStep === 1}>Back</button>
-                       <button onClick={() => setRegStep(p => p + 1)} className="flex-[2] py-5 bg-indigo-600 text-white text-[11px] font-black uppercase tracking-widest rounded-3xl shadow-xl shadow-indigo-100">Continue</button>
-                    </div>
-                 </div>
-              ) : (
-                <div className="animate-in fade-in slide-in-from-bottom-4">
-                  <div className="text-indigo-600 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 mb-4"><Sparkles size={16} /> FINALIZE</div>
-                  <h3 className="text-2xl font-black text-slate-900 mb-8">Almost there!</h3>
-                  <div className="space-y-6 mb-10">
-                    <label className="flex items-center gap-4 cursor-pointer"><input type="checkbox" checked={agree1} onChange={e => setAgree1(e.target.checked)} className="peer sr-only" /><div className="w-6 h-6 border-2 border-slate-200 rounded-lg bg-white peer-checked:bg-indigo-600 peer-checked:border-indigo-600 transition-colors" /><Check size={14} strokeWidth={4} className="absolute left-1.5 top-1.5 text-white opacity-0 peer-checked:opacity-100" /><span className="text-xs font-bold text-slate-400">Receive updates and tips from Caltrack.</span></label>
-                    <label className="flex items-center gap-4 cursor-pointer"><input type="checkbox" checked={agree2} onChange={e => setAgree2(e.target.checked)} className="peer sr-only" /><div className="w-6 h-6 border-2 border-slate-200 rounded-lg bg-white peer-checked:bg-indigo-600 peer-checked:border-indigo-600 transition-colors" /><Check size={14} strokeWidth={4} className="absolute left-1.5 top-1.5 text-white opacity-0 peer-checked:opacity-100" /><span className="text-xs font-bold text-slate-400">Agree to <a href="#" className="text-indigo-600 hover:underline">Terms</a> &amp; <a href="#" className="text-indigo-600 hover:underline">Privacy</a>.</span></label>
-                    <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] flex items-center justify-between"><span className="text-sm font-black text-slate-700">I'm not a robot</span><label className="relative cursor-pointer"><input type="checkbox" checked={robot} onChange={e => setRobot(e.target.checked)} className="peer sr-only" /><div className="w-7 h-7 bg-white border-2 border-slate-200 rounded-lg peer-checked:bg-emerald-500 peer-checked:border-emerald-500" /><Check size={18} strokeWidth={4} className="absolute left-1 top-1 text-white opacity-0 peer-checked:opacity-100" /></label></div>
-                  </div>
-                  {error && <div className="p-5 bg-red-50 text-red-600 text-xs font-bold rounded-2xl mb-8">{error}</div>}
-                  <div className="flex gap-4">
-                    <button onClick={() => setRegStep(3)} className="flex-1 py-5 bg-white border border-slate-100 text-slate-400 text-[11px] font-black uppercase tracking-widest rounded-3xl">BACK</button>
-                    <button onClick={onSubmit} className="flex-[2] flex justify-center items-center gap-2 py-5 bg-[#818cf8] text-white text-[11px] font-black uppercase tracking-widest rounded-3xl shadow-xl shadow-indigo-100">{loading ? <RefreshCcw className="animate-spin" size={20} /> : <RefreshCcw size={20} />}</button>
+            <div className="mb-10 flex items-center justify-between relative px-2">
+              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-[#F1F5F9] -translate-y-1/2 z-0 mx-8" />
+              <div 
+                className="absolute top-1/2 left-0 h-0.5 bg-[#10B981] -translate-y-1/2 z-0 transition-all duration-500 mx-8" 
+                style={{ width: `calc(${(regStep - 1) / 3 * 100}%)` }}
+              />
+              {[1, 2, 3, 4].map((s) => (
+                <div key={s} className="relative z-10 flex flex-col items-center">
+                  <div 
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-black transition-all duration-300 border-4 ${
+                      regStep > s ? "bg-[#10B981] border-[#D1FAE5] text-white" : 
+                      regStep === s ? "bg-indigo-600 border-[#EEF2FF] text-white" : 
+                      "bg-[#F8FAFC] border-[#F1F5F9] text-[#94A3B8]"
+                    }`}
+                  >
+                    {regStep > s ? <Check size={18} strokeWidth={3} /> : s}
                   </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
 
-          <div className="text-center mt-10">
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Need help? <a href="#" className="text-indigo-600 hover:underline">Contact Support</a>
-             </span>
+          <form onSubmit={onSubmit} className="space-y-6">
+            {mode === "signin" ? (
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <div className="relative group">
+                    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-focus-within:text-indigo-600 transition-colors" size={18} />
+                    <input 
+                      className="w-full pl-14 pr-5 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all placeholder:text-[#94A3B8]" 
+                      placeholder="Work Email" 
+                      value={username} 
+                      onChange={e => setUsername(e.target.value)} 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="relative group">
+                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-[#94A3B8] group-focus-within:text-indigo-600 transition-colors" size={18} />
+                    <input 
+                      className="w-full pl-14 pr-14 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all placeholder:text-[#94A3B8]" 
+                      type={showPass ? "text" : "password"} 
+                      placeholder="Password" 
+                      value={password} 
+                      onChange={e => setPassword(e.target.value)} 
+                    />
+                    <button type="button" className="absolute right-5 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-[#334155]" onClick={() => setShowPass(p => !p)}>
+                      {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-[240px]">
+                {regStep === 1 && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
+                    <h2 className="text-xl font-black text-[#0F172A] mb-6">Personal Details</h2>
+                    <div className="relative">
+                      <input className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all" placeholder="Full Name" value={fullName} onChange={e => setFullName(e.target.value)} />
+                    </div>
+                    <div className="relative">
+                      <input className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all" placeholder="Work Email" value={email} onChange={e => setEmail(e.target.value)} />
+                    </div>
+                  </motion.div>
+                )}
+                {regStep === 2 && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
+                    <h2 className="text-xl font-black text-[#0F172A] mb-6">Organization Info</h2>
+                    <input className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all" placeholder="Organization Name" value={orgName} onChange={e => setOrgName(e.target.value)} />
+                    <select className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all appearance-none" value={numEmployees} onChange={e => setNumEmployees(e.target.value)}>
+                      <option>1 - 10 employees</option>
+                      <option>11 - 50 employees</option>
+                      <option>51 - 200 employees</option>
+                      <option>201+ employees</option>
+                    </select>
+                  </motion.div>
+                )}
+                {regStep === 3 && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
+                    <h2 className="text-xl font-black text-[#0F172A] mb-6">Platform Credentials</h2>
+                    <input className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
+                    <input className="w-full px-6 py-5 bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl text-[15px] font-medium outline-none focus:bg-white focus:border-indigo-500 transition-all" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+                  </motion.div>
+                )}
+                {regStep === 4 && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                    <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest mb-1">
+                      <ShieldCheck size={14} /> Finalize
+                    </div>
+                    <h2 className="text-[28px] font-black text-[#0F172A] leading-tight">Almost there!</h2>
+                    
+                    <div className="space-y-4 pt-2">
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className={`mt-1 w-5 h-5 rounded-md flex items-center justify-center transition-all border ${agreedUpdates ? "bg-indigo-600 border-indigo-600 text-white" : "border-[#E2E8F0] bg-white group-hover:border-indigo-200"}`}>
+                          {agreedUpdates && <Check size={14} strokeWidth={4} />}
+                        </div>
+                        <input type="checkbox" className="hidden" checked={agreedUpdates} onChange={() => setAgreedUpdates(!agreedUpdates)} />
+                        <span className="text-[13px] font-medium text-[#64748B] leading-tight">Receive updates and tips from Caltrack.</span>
+                      </label>
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className={`mt-1 w-5 h-5 rounded-md flex items-center justify-center transition-all border ${agreedTerms ? "bg-indigo-600 border-indigo-600 text-white" : "border-[#E2E8F0] bg-white group-hover:border-indigo-200"}`}>
+                          {agreedTerms && <Check size={14} strokeWidth={4} />}
+                        </div>
+                        <input type="checkbox" className="hidden" checked={agreedTerms} onChange={() => setAgreedTerms(!agreedTerms)} />
+                        <span className="text-[13px] font-medium text-[#64748B] leading-tight">Agree to <span className="text-indigo-600 font-bold">Terms</span> & <span className="text-indigo-600 font-bold">Privacy</span>.</span>
+                      </label>
+                    </div>
+
+                    <div className="bg-[#F8FAFC] border border-[#F1F5F9] rounded-2xl p-5 flex items-center justify-between">
+                      <span className="text-[15px] font-bold text-[#0F172A]">I'm not a robot</span>
+                      <div className="w-6 h-6 border-2 border-[#E2E8F0] rounded-md" />
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <div className="p-4 bg-red-50 text-red-600 text-xs font-bold rounded-2xl border border-red-100 flex items-center gap-3">
+                <AlertCircle size={15} /> {error}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              {mode === "register" && regStep > 1 && (
+                <button 
+                  type="button" 
+                  onClick={() => setRegStep(p => p - 1)}
+                  className="flex-1 py-5 bg-[#F8FAFC] text-[#64748B] text-[13px] font-black uppercase tracking-widest rounded-2xl border border-[#F1F5F9] hover:bg-white transition-all"
+                >
+                  Back
+                </button>
+              )}
+              <button 
+                type={mode === "register" && regStep < 4 ? "button" : "submit"} 
+                disabled={loading || (mode === "register" && regStep === 4 && !agreedTerms)}
+                onClick={() => {
+                  if (mode === "register" && regStep < 4) setRegStep(p => p + 1)
+                }}
+                className={`flex-[2] py-5 bg-indigo-600 text-white text-[13px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:shadow-none`}
+              >
+                {loading ? <RefreshCcw className="animate-spin" size={18} /> : 
+                  mode === "signin" ? "Sign In" : 
+                  regStep === 4 ? (agreedTerms ? "Continue" : <RefreshCcw size={18} />) : "Continue"}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-12 text-center">
+            <button className="text-[11px] font-black uppercase tracking-widest text-[#94A3B8] hover:text-indigo-600 transition-colors">
+              Need Help? <span className="text-indigo-600">Contact Support</span>
+            </button>
           </div>
         </div>
       </div>

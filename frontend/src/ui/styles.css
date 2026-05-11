@@ -2044,7 +2044,8 @@ button {
 }
 
 .app.app-collapsed .navItem.active {
-  padding-left: 10px; /* Room for indicator */
+  padding-left: 10px;
+  /* Room for indicator */
 }
 
 .app.app-collapsed .navLabel {
@@ -12486,6 +12487,7 @@ body,
   min-height: 600px;
   margin-bottom: 24px;
 }
+
 .adx-left {
   width: 280px;
   background: #ecd55e;
@@ -12495,29 +12497,34 @@ body,
   padding: 16px;
   overflow-y: auto;
 }
+
 .adx-left-title {
   font-weight: 800;
   font-size: 16px;
   color: #1a1a1a;
   margin-bottom: 12px;
 }
+
 .adx-emp-card {
   background: #fff;
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 12px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
 .adx-emp-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
+
 .adx-emp-name {
   font-weight: 700;
   font-size: 14px;
 }
+
 .adx-emp-avatar {
   width: 32px;
   height: 32px;
@@ -12531,6 +12538,7 @@ body,
   color: #555;
   overflow: hidden;
 }
+
 .adx-emp-stats {
   font-size: 11px;
   color: #555;
@@ -12538,6 +12546,7 @@ body,
   display: flex;
   flex-direction: column;
 }
+
 .adx-main {
   flex: 1;
   background: #fff;
@@ -12546,6 +12555,7 @@ body,
   flex-direction: column;
   overflow: hidden;
 }
+
 .adx-top-nav {
   display: flex;
   padding: 12px 24px;
@@ -12554,34 +12564,41 @@ body,
   align-items: center;
   justify-content: space-between;
 }
+
 .adx-nav-item {
   font-size: 12px;
   font-weight: 700;
   color: #555;
   cursor: pointer;
 }
+
 .adx-nav-item.active {
   background: #1e1b4b;
   color: #fff;
   padding: 6px 16px;
   border-radius: 16px;
 }
+
 .adx-body {
   display: flex;
   flex: 1;
 }
+
 .adx-calendar {
   flex: 1;
   padding: 24px;
 }
+
 .adx-cal-grid {
   display: grid;
   grid-template-columns: 80px repeat(7, 1fr);
   gap: 8px;
 }
+
 .adx-cal-header-row {
   display: contents;
 }
+
 .adx-cal-header {
   font-size: 11px;
   font-weight: 600;
@@ -12589,9 +12606,11 @@ body,
   text-align: center;
   padding-bottom: 8px;
 }
+
 .adx-cal-cell-wrap {
   display: contents;
 }
+
 .adx-cal-row-header {
   font-size: 11px;
   font-weight: 600;
@@ -12599,6 +12618,7 @@ body,
   display: flex;
   align-items: center;
 }
+
 .adx-cal-cell {
   background: #e5e7eb;
   border-radius: 6px;
@@ -12609,15 +12629,18 @@ body,
   flex-direction: column;
   justify-content: space-between;
 }
+
 .adx-cal-cell.empty {
   background: transparent;
 }
+
 .adx-cal-date {
   font-weight: 700;
   font-size: 14px;
   text-align: right;
   color: #1f2937;
 }
+
 .adx-cal-bottom {
   display: flex;
   align-items: center;
@@ -12626,12 +12649,14 @@ body,
   font-weight: 600;
   color: #4b5563;
 }
+
 .adx-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   display: inline-block;
 }
+
 .adx-kpi-panel {
   width: 200px;
   border-left: 1px solid #eee;
@@ -12641,11 +12666,13 @@ body,
   align-items: center;
   overflow-y: auto;
 }
+
 .adx-kpi-title {
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 16px;
 }
+
 .adx-kpi-item {
   text-align: center;
   margin-bottom: 24px;
@@ -12653,14 +12680,17 @@ body,
   border-bottom: 1px solid #eee;
   padding-bottom: 16px;
 }
+
 .adx-kpi-item:last-child {
   border-bottom: none;
 }
+
 .adx-kpi-label {
   font-size: 11px;
   color: #666;
   margin-bottom: 4px;
 }
+
 .adx-kpi-val {
   font-size: 20px;
   font-weight: 800;
@@ -12670,7 +12700,7 @@ body,
 /* New Icon Button Styles */
 .adx-icon-btn {
   background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.05);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 8px;
   width: 36px;
   height: 36px;
@@ -12680,13 +12710,13 @@ body,
   cursor: pointer;
   transition: all 0.2s ease;
   color: #1a1a1a;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .adx-icon-btn:hover {
   background: #f9fafb;
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   border-color: #1e1b4b;
 }
 
@@ -12702,4 +12732,175 @@ body,
 
 .adx-icon-btn svg {
   display: block;
+}
+
+.stComingSoon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 32px;
+  text-align: center;
+  background: white;
+  border-radius: 16px;
+  border: 1px dashed rgba(0, 0, 0, 0.1);
+  color: #94a3b8;
+}
+
+.stComingSoon h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 16px 0 8px 0;
+}
+
+.stComingSoon p {
+  font-size: 14px;
+  max-width: 300px;
+}
+
+.stToast[data-type="success"] {
+  border-left: 4px solid #059669;
+}
+
+.stToast[data-type="error"],
+.stToast[data-type="warn"] {
+  border-left: 4px solid #ef4444;
+}
+
+.stToastClose {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.stToastClose:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.stSaveBtn {
+  background: #1a56db;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes stSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
 }
