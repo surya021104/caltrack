@@ -206,11 +206,8 @@ function useLocationTracker(isClockedIn) {
     }
 
     reportLocation()
-<<<<<<< HEAD
-=======
 
     // Every 5 minutes (reduced frequency to save DB connections and battery)
->>>>>>> 17a742eb5a8defc6b5fe95580ed3cf26ba609ecd
     const id = setInterval(reportLocation, 300000)
     return () => clearInterval(id)
   }, [isClockedIn])
@@ -1452,7 +1449,6 @@ function EmployeeTimePage() {
                   <span className="text-lg font-black tabular-nums">{formatDuration(elapsed)}</span>
                 </div>
                 <div className="flex items-center gap-1 ml-2">
-<<<<<<< HEAD
                   {!openBreak ? (
                     <>
                       <button onClick={() => action("/time/break/start/")} className="p-2.5 bg-slate-800 hover:bg-amber-500 text-white rounded-xl transition-all" title="Start Break"><Coffee size={16} /></button>
@@ -1483,19 +1479,7 @@ function EmployeeTimePage() {
                       </button>
                     </>
                   ) : (
-=======
-                  {openBreak ? (
->>>>>>> 17a742eb5a8defc6b5fe95580ed3cf26ba609ecd
                     <button onClick={() => action("/time/break/end/")} className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black rounded-xl flex items-center gap-2 transition-all"><Play size={14} /> RESUME</button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => action("/time/break/start/")} className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl flex items-center gap-2 transition-all">
-                        <Coffee size={14} /> PAUSE
-                      </button>
-                      <button onClick={() => setPanelOpen(true)} className="px-6 py-2.5 bg-slate-800 hover:bg-indigo-500 text-white text-xs font-black rounded-xl flex items-center gap-2 transition-all">
-                        <SlidersHorizontal size={14} /> MANAGE SESSION
-                      </button>
-                    </div>
                   )}
                 </div>
               </div>
