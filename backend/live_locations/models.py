@@ -44,6 +44,7 @@ class EmployeeLocation(models.Model):
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['employee', 'timestamp']),
+            models.Index(fields=['time_log', 'timestamp']),
             models.Index(fields=['time_log']),
         ]
 

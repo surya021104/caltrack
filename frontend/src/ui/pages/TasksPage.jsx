@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, memo } from "react"
 import { apiRequest, unwrapResults } from "../../api/client.js"
 import { useAuth } from "../../state/auth/useAuth.js"
 import { Pill, Button, Card, Input, Select, TextArea } from "../components/kit.jsx"
@@ -44,17 +44,27 @@ const EMPTY_FORM = {
 }
 
 // ─── Task Card (Employee) ────────────────────────────────────
+// Centralized timer to prevent multiple intervals
+let _globalTick = Date.now()
+const _timerCallbacks = new Set()
+setInterval(() => {
+  _globalTick = Date.now()
+  _timerCallbacks.forEach(cb => cb(_globalTick))
+}, 1000)
+
 function useElapsed(clockInStr) {
-  const [elapsed, setElapsed] = useState(0)
+  const [now, setNow] = useState(Date.now())
+  
   useEffect(() => {
-    if (!clockInStr) { setElapsed(0); return }
-    const start = new Date(clockInStr).getTime()
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
+    if (!clockInStr) return
+    const update = (t) => setNow(t)
+    _timerCallbacks.add(update)
+    return () => _timerCallbacks.delete(update)
   }, [clockInStr])
-  return elapsed
+
+  if (!clockInStr) return 0
+  const start = new Date(clockInStr).getTime()
+  return Math.max(0, Math.floor((now - start) / 1000))
 }
 
 function formatDuration(seconds) {
@@ -65,7 +75,7 @@ function formatDuration(seconds) {
   return [h, m, s].map(v => String(v).padStart(2, "0")).join(":")
 }
 
-function TaskCard({ task, onAction, busy }) {
+const TaskCard = memo(({ task, onAction, busy }) => {
   const [note, setNote] = useState(task.employee_notes || "")
   const [expanded, setExpanded] = useState(false)
 
@@ -186,7 +196,7 @@ function TaskCard({ task, onAction, busy }) {
       )}
     </div>
   )
-}
+})
 
 // ─── ADMIN: Assign Panel ─────────────────────────────────────
 function AssignTaskPanel({ employees, jobSites, onAssigned, onClose }) {

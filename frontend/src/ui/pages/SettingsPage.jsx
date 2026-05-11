@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, lazy, Suspense } from "react"
 import { useLocation, NavLink } from "react-router-dom"
 import { routes } from "../routes.js"
 import { useAuth } from "../../state/auth/useAuth.js"
@@ -15,6 +15,9 @@ import {
   Database, Command, Link, Share2, SlidersHorizontal, CalendarRange,
   Copy, Download, Box, Terminal, Layout, FileJson, Link2, Briefcase, Timer
 } from "lucide-react"
+
+const ProfileSection = lazy(() => import("./settings/ProfileSection.jsx"))
+const AISettingsSection = lazy(() => import("./settings/AISettingsSection.jsx"))
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function Toast({ message, type = "success", onDismiss }) {
@@ -238,45 +241,47 @@ export function SettingsPage({ section: sectionProp }) {
 
         {/* Right Content */}
         <main className="stMain">
-          {/* General */}
-          {activeSection === "profile" && <ProfileSection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "preferences" && <PreferencesSection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "branding" && <LogoSection markDirty={markDirty} />}
-          {activeSection === "organization" && <CompanySettingsSection markDirty={markDirty} showToast={showToast} />}
+          <Suspense fallback={<div className="p-20 text-center text-slate-400">Loading section...</div>}>
+            {/* General */}
+            {activeSection === "profile" && <ProfileSection markDirty={markDirty} showToast={showToast} Field={Field} SectionHeader={SectionHeader} />}
+            {activeSection === "preferences" && <PreferencesSection markDirty={markDirty} showToast={showToast} />}
+            {activeSection === "branding" && <LogoSection markDirty={markDirty} />}
+            {activeSection === "organization" && <CompanySettingsSection markDirty={markDirty} showToast={showToast} />}
 
-          {/* AI */}
-          {activeSection === "ai-automation" && <AISettingsSection markDirty={markDirty} showToast={showToast} />}
+            {/* AI */}
+            {activeSection === "ai-automation" && <AISettingsSection markDirty={markDirty} showToast={showToast} SectionHeader={SectionHeader} ToggleSwitch={ToggleSwitch} />}
 
-          {/* Workforce */}
-          {activeSection === "people" && <ProfileRequirementsSection markDirty={markDirty} />}
-          {activeSection === "time-tracking" && <ClockInMethodsSection markDirty={markDirty} />}
-          {activeSection === "attendance" && <AttendancePolicySection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "schedules" && <FlexibleHoursSection markDirty={markDirty} />}
-          {activeSection === "shift-planner" && <ShiftPlanningSection markDirty={markDirty} />}
-          {activeSection === "holidays" && <PublicHolidaysSection markDirty={markDirty} />}
+            {/* Workforce */}
+            {activeSection === "people" && <ProfileRequirementsSection markDirty={markDirty} />}
+            {activeSection === "time-tracking" && <ClockInMethodsSection markDirty={markDirty} />}
+            {activeSection === "attendance" && <AttendancePolicySection markDirty={markDirty} showToast={showToast} />}
+            {activeSection === "schedules" && <FlexibleHoursSection markDirty={markDirty} />}
+            {activeSection === "shift-planner" && <ShiftPlanningSection markDirty={markDirty} />}
+            {activeSection === "holidays" && <PublicHolidaysSection markDirty={markDirty} />}
 
-          {/* Financials */}
-          {activeSection === "payroll" && <PayCycleSection markDirty={markDirty} />}
-          {activeSection === "expenses" && <ExpensesSection markDirty={markDirty} showToast={showToast} />}
+            {/* Financials */}
+            {activeSection === "payroll" && <PayCycleSection markDirty={markDirty} />}
+            {activeSection === "expenses" && <ExpensesSection markDirty={markDirty} showToast={showToast} />}
 
-          {/* Operations */}
-          {activeSection === "workflows" && <WorkflowSection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "productivity" && <ProductivitySection markDirty={markDirty} />}
-          {activeSection === "reports" && <ReportsSection showToast={showToast} />}
-          {activeSection === "notifications" && <DeliveryChannelsSection markDirty={markDirty} />}
+            {/* Operations */}
+            {activeSection === "workflows" && <WorkflowSection markDirty={markDirty} showToast={showToast} />}
+            {activeSection === "productivity" && <ProductivitySection markDirty={markDirty} />}
+            {activeSection === "reports" && <ReportsSection showToast={showToast} />}
+            {activeSection === "notifications" && <DeliveryChannelsSection markDirty={markDirty} />}
 
-          {/* System */}
-          {activeSection === "security" && <SecuritySection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "rbac" && <RolesPermissionsSection markDirty={markDirty} />}
-          {activeSection === "audit" && <ActivitySection />}
-          {activeSection === "devices" && <DevicesSection markDirty={markDirty} showToast={showToast} />}
-          {activeSection === "location" && <GeofencingSection markDirty={markDirty} />}
+            {/* System */}
+            {activeSection === "security" && <SecuritySection markDirty={markDirty} showToast={showToast} />}
+            {activeSection === "rbac" && <RolesPermissionsSection markDirty={markDirty} />}
+            {activeSection === "audit" && <ActivitySection />}
+            {activeSection === "devices" && <DevicesSection markDirty={markDirty} showToast={showToast} />}
+            {activeSection === "location" && <GeofencingSection markDirty={markDirty} />}
 
-          {/* Enterprise */}
-          {activeSection === "integrations" && <IntegrationsSection showToast={showToast} />}
-          {activeSection === "developer" && <DeveloperSection showToast={showToast} />}
-          {activeSection === "billing" && <PlanSection />}
-          {activeSection === "data" && <DataBackupsSection showToast={showToast} />}
+            {/* Enterprise */}
+            {activeSection === "integrations" && <IntegrationsSection showToast={showToast} />}
+            {activeSection === "developer" && <DeveloperSection showToast={showToast} />}
+            {activeSection === "billing" && <PlanSection />}
+            {activeSection === "data" && <DataBackupsSection showToast={showToast} />}
+          </Suspense>
         </main>
       </div>
 
@@ -316,60 +321,7 @@ function ComingSoon({ label }) {
 }
 
 
-/* ═══ PROFILE ════════════════════════════════════════════════════ */
-function ProfileSection({ markDirty, showToast }) {
-  const [name, setName] = useState("Jasmine Dorathy")
-  const [username, setUsername] = useState("jasminedorathy")
-  const [role, setRole] = useState("Administrator")
-  const [location, setLocation] = useState("Chennai, Tamil Nadu")
-  const [bio, setBio] = useState("Enterprise admin managing QuickTims ERP system operations.")
-  return (
-    <div className="stPanel">
-      <SectionHeader title="Profile" subtitle="Update your personal information visible across the system." />
-      <div className="stCard">
-        <div className="stFormGrid">
-          <Field label="Full name" half>
-            <input className="stInput" value={name} placeholder="Your full name" onChange={e => { setName(e.target.value); markDirty() }} />
-          </Field>
-          <Field label="Username" half>
-            <input className="stInput" value={username} placeholder="Your username" onChange={e => { setUsername(e.target.value); markDirty() }} />
-          </Field>
-          <Field label="Profession">
-            <select className="stInput stSelect" onChange={() => markDirty()}>
-              <option>Administrator</option>
-              <option>HR Manager</option>
-              <option>Finance Lead</option>
-              <option>Operations Head</option>
-            </select>
-          </Field>
-          <Field label="Location">
-            <select className="stInput stSelect" onChange={() => markDirty()}>
-              <option>Chennai, Tamil Nadu</option>
-              <option>Bengaluru, Karnataka</option>
-              <option>Mumbai, Maharashtra</option>
-              <option>Hyderabad, Telangana</option>
-            </select>
-          </Field>
-          <Field label="Bio">
-            <textarea className="stInput stTextarea" value={bio} placeholder="A short bio..."
-              onChange={e => { setBio(e.target.value); markDirty() }} rows={3} />
-          </Field>
-          <Field label="Profile link">
-            <div className="stInputAddon">
-              <span className="stInputAddonPrefix">erp.caltims.com/u/</span>
-              <input className="stInput stInputAddonField" value={username} onChange={e => { setUsername(e.target.value); markDirty() }} />
-            </div>
-          </Field>
-        </div>
-        <div className="stCardActions">
-          <button className="stPrimaryBtn" onClick={() => showToast("Profile updated!")}>
-            <Save size={14} /> Save Profile
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+
 
 /* ═══ COMPANY SETTINGS ═══════════════════════════════════════════════ */
 function CompanySettingsSection({ markDirty, showToast }) {
@@ -501,52 +453,7 @@ function CompanySettingsSection({ markDirty, showToast }) {
   )
 }
 
-/* ═══ AI & AUTOMATION ════════════════════════════════════════════════ */
-function AISettingsSection({ markDirty, showToast }) {
-  const [enabled, setEnabled] = useState(true)
-  const [anomaly, setAnomaly] = useState(true)
-  const [autoApproval, setAutoApproval] = useState(false)
-  
-  return (
-    <div className="stPanel">
-      <SectionHeader title="AI & Automation" subtitle="Leverage machine learning for attendance insights and smart operations." />
-      
-      <div className="stCard">
-        <div className="stToggleRow">
-          <div>
-            <div className="stToggleLabel">AI Attendance Insights</div>
-            <div className="stToggleDesc">Automatically detect patterns in employee clock-ins and outs.</div>
-          </div>
-          <ToggleSwitch checked={enabled} onChange={v => { setEnabled(v); markDirty() }} />
-        </div>
-        
-        <div className="stToggleRow">
-          <div>
-            <div className="stToggleLabel">Anomaly Detection</div>
-            <div className="stToggleDesc">Flag suspicious activity like multiple logins or unusual locations.</div>
-          </div>
-          <ToggleSwitch checked={anomaly} onChange={v => { setAnomaly(v); markDirty() }} accent="#F43F5E" />
-        </div>
 
-        <div className="stToggleRow">
-          <div>
-            <div className="stToggleLabel">Auto-Payroll Suggestions</div>
-            <div className="stToggleDesc">AI-generated payroll exports based on historical work hours.</div>
-          </div>
-          <ToggleSwitch checked={autoApproval} onChange={v => { setAutoApproval(v); markDirty() }} accent="#10B981" />
-        </div>
-      </div>
-
-      <div className="stCard">
-        <h4 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 800 }}>Productivity Scoring</h4>
-        <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>Calculate individual and team productivity scores using AI models.</p>
-        <button className="stSecondaryBtn" onClick={() => showToast("AI Model Training in progress...", "info")}>
-          <RefreshCcw size={14} /> Recalculate Scores
-        </button>
-      </div>
-    </div>
-  )
-}
 
 /* ═══ ATTENDANCE POLICIES ════════════════════════════════════════════ */
 function AttendancePolicySection({ markDirty, showToast }) {

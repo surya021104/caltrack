@@ -189,6 +189,9 @@ class TimeLog(models.Model):
             # and AdminEmployeeTimeLogsView (per-employee log list).
             models.Index(fields=["employee", "work_date", "clock_in"], name="tl_emp_date_clockin_idx"),
             models.Index(fields=["employee", "clock_out"], name="tl_emp_open_idx"),
+            # New Production Indexes:
+            models.Index(fields=["status", "work_date"], name="tl_status_date_idx"),
+            models.Index(fields=["employee", "status"], name="tl_emp_status_idx"),
         ]
 
     @property
@@ -246,3 +249,25 @@ class TimeLogPhoto(models.Model):
     ])
     caption = models.TextField(blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.photo and not self.id: # Only on creation
+            from io import BytesIO
+            from PIL import Image
+            from django.core.files.base import ContentFile
+            
+            img = Image.open(self.photo)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Resize if too large
+            max_size = (1280, 1280)
+            img.thumbnail(max_size, Image.LANCZOS)
+            
+            output = BytesIO()
+            img.save(output, format='JPEG', quality=75, optimize=True)
+            output.seek(0)
+            
+            self.photo = ContentFile(output.read(), name=self.photo.name)
+            
+        super().save(*args, **kwargs)

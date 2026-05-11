@@ -65,13 +65,17 @@ class DashboardAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = timezone.localdate()
-        thirty_days_ago = today - timedelta(days=30)
-        seven_days_ago = today - timedelta(days=7)
-
         company = getattr(request, 'company', None)
         if not company:
             return Response({"error": "No company associated"}, status=403)
+
+        from django.core.cache import cache
+        cache_key = f"dashboard_analytics_{company.id}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+
+        today = timezone.localdate()
 
         # ── KPI Cards ──
         employees_total = Employee.objects.filter(company=company).count()
@@ -384,7 +388,7 @@ class DashboardAnalyticsView(APIView):
             })
         location_summary.sort(key=lambda x: x["clock_ins"], reverse=True)
 
-        return Response({
+        data = {
             "kpi": {
                 "total_hours_month": round(total_hours_month, 1),
                 "total_hours_week": round(total_hours_week, 1),
@@ -410,4 +414,6 @@ class DashboardAnalyticsView(APIView):
                 "tasks_by_location": tasks_by_location,
                 "hours_by_location": hours_by_location,
             },
-        })
+        }
+        cache.set(cache_key, data, 60) # Cache for 1 minute
+        return Response(data)
