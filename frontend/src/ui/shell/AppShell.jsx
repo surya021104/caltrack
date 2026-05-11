@@ -48,7 +48,8 @@ import {
   Smartphone,
   Palette,
   Terminal,
-  Database
+  Database,
+  ShieldAlert,
 } from "lucide-react"
 
 const NAV = [
@@ -63,6 +64,7 @@ const NAV = [
   { label: "Scheduling", to: routes.scheduling, icon: <CalendarRange size={18} strokeWidth={2.5} color="#EC4899" /> },
   { label: "Employees", to: routes.employees, icon: <Users size={18} strokeWidth={2.5} color="#A855F7" />, adminOnly: true },
   { label: "Reports", to: routes.reports, icon: <BarChart3 size={18} strokeWidth={2.5} color="#F59E0B" />, adminOnly: true },
+  { label: "Compliance", to: routes.compliance, icon: <ShieldAlert size={18} strokeWidth={2.5} color="#E94560" />, adminOnly: true },
   {
     label: "Settings",
     to: routes.settings,

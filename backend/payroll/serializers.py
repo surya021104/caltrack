@@ -1,5 +1,4 @@
 from rest_framework import serializers
-
 from .models import PayrollPeriod, PayrollRecord
 
 
@@ -22,19 +21,15 @@ class PayrollRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayrollRecord
         fields = (
-            "id",
-            "period",
-            "employee",
-            "employee_name",
-            "hourly_rate",
-            "regular_hours",
-            "overtime_hours",
-            "paid_leave_hours",
-            "unpaid_leave_hours",
-            "gross_pay",
-            "net_pay",
-            "generated_by",
-            "generated_at",
+            "id", "period", "employee", "employee_name",
+            "hourly_rate", "regular_hours", "overtime_hours",
+            "daily_ot_hours", "double_time_hours",
+            "paid_leave_hours", "unpaid_leave_hours",
+            "gross_pay", "uk_income_tax", "uk_employee_ni",
+            "uk_employer_ni", "uk_tax_code", "uk_ni_category",
+            "holiday_hours_accrued", "net_pay", "region",
+            "is_exempt", "wage_floor_compliant",
+            "generated_by", "generated_at",
         )
         read_only_fields = ("id", "gross_pay", "net_pay", "generated_by", "generated_at")
 

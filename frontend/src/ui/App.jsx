@@ -22,6 +22,7 @@ import { TimeTrackingSettingsPage } from "./pages/TimeTrackingSettingsPage.jsx"
 import { WorkSchedulesSettingsPage } from "./pages/WorkSchedulesSettingsPage.jsx"
 import { HolidaysSettingsPage } from "./pages/HolidaysSettingsPage.jsx"
 import { LocationsSettingsPage } from "./pages/LocationsSettingsPage.jsx"
+import { CompliancePage } from "./pages/CompliancePage.jsx"
 
 export function App() {
   const { isReady, user } = useAuth()
@@ -65,7 +66,8 @@ export function App() {
           <Route path={routes.scheduling} element={<SchedulingPage />} />
           <Route path={routes.employees} element={<EmployeesPage />} />
           <Route path={routes.reports} element={<ReportsPage />} />
-          
+          <Route path={routes.compliance} element={<CompliancePage />} />
+
           {/* Settings Routes */}
           <Route path={routes.settings} element={<SettingsPage />} />
           <Route path={routes.settings_people} element={<PeopleSettingsPage />} />
