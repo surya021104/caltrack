@@ -206,7 +206,6 @@ function useLocationTracker(isClockedIn) {
     }
 
     reportLocation()
-
     // Every 5 minutes (reduced frequency to save DB connections and battery)
     const id = setInterval(reportLocation, 300000)
     return () => clearInterval(id)
@@ -1454,7 +1453,6 @@ function EmployeeTimePage() {
                       <button onClick={() => action("/time/break/start/")} className="p-2.5 bg-slate-800 hover:bg-amber-500 text-white rounded-xl transition-all" title="Start Break"><Coffee size={16} /></button>
                       <button onClick={() => setPanelOpen(true)} className="p-2.5 bg-slate-800 hover:bg-emerald-500 text-white rounded-xl transition-all" title="Job Photo"><Camera size={16} /></button>
                       <button onClick={handleClockOut} className="p-2.5 bg-slate-800 hover:bg-red-500 text-white rounded-xl transition-all" title="Clock Out"><Square size={14} fill="currentColor" /></button>
-                      {/* SOS panic button */}
                       <button
                         onClick={handleSOS}
                         disabled={sosSending}
