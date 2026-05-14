@@ -28,7 +28,7 @@ function formatEmployeeId(value) {
 
 export function LeavesPage() {
   const { user } = useAuth()
-  const isAdmin = isAdmin || user?.role === "manager"
+  const isAdmin = user?.role === "admin" || user?.role === "manager"
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)

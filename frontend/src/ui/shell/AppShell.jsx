@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -12,6 +12,9 @@ import { NotificationCenter } from "./NotificationCenter.jsx"
 import { CalTrackLogo } from "../components/CalTrackLogo.jsx"
 import { apiRequest, unwrapResults } from "../../api/client.js"
 import { NotificationService } from "../../utils/notifications.js"
+import { useWebSocket } from "../../hooks/useWebSocket.js"
+import { useDispatch } from "react-redux"
+import { addSosAlert, addGeofenceBreach } from "../../store/liveLocationSlice.js"
 
 import {
   Home, Clock, CheckSquare, CalendarDays, Banknote, CalendarRange,
@@ -72,6 +75,25 @@ function displayName(username) {
   const s = String(username || "").trim()
   if (!s) return ""
   return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function playCriticalAlert() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5)
+    osc.type = "square"
+    gain.gain.setValueAtTime(0.1, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.5)
+  } catch (e) {
+    console.warn("Audio alert failed", e)
+  }
 }
 
 function SidebarTooltip({ tooltip }) {
@@ -249,6 +271,24 @@ export function AppShell() {
       window.removeEventListener("pointerdown", onPointerDown)
     }
   }, [workspaceMenuOpen])
+
+  const dispatch = useDispatch()
+
+  const handleGlobalWsMessage = useCallback((msg) => {
+    if (msg.type === "sos_alert") {
+      dispatch(addSosAlert(msg.data))
+      playCriticalAlert()
+      NotificationService.send("🆘 SOS ALERT", `${msg.data.employee_name} needs assistance!`)
+    } else if (msg.type === "geofence_breach") {
+      dispatch(addGeofenceBreach(msg.data))
+    }
+  }, [dispatch])
+
+  const isLiveTrackingPage = location.pathname === routes.live_locations
+  useWebSocket(isAdmin && !isLiveTrackingPage ? "/ws/live/admin/" : null, {
+    onMessage: handleGlobalWsMessage,
+  })
+
 
   if (!user) return null
 

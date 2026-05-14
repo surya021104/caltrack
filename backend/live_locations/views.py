@@ -421,12 +421,19 @@ class SOSView(APIView):
                     "timestamp": sos.triggered_at.isoformat(),
                     "status": "active",
                 }
+                # Use str(company.id) to match AdminMapConsumer's group naming
+                group_name = f"live_admin_{str(company.id)}"
                 async_to_sync(channel_layer.group_send)(
-                    f"live_admin_{company.id}",
+                    group_name,
                     {"type": "employee_sos", "data": sos_data},
                 )
-        except Exception:
-            pass
+                print(f"DEBUG: SOS alert broadcasted to {group_name}")
+            else:
+                print(f"DEBUG: SOS broadcast skipped. Layer: {bool(channel_layer)}, Company: {bool(company)}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"DEBUG: SOS broadcast failed: {e}")
 
         return Response(
             {"id": str(sos.id), "message": "SOS alert sent."},

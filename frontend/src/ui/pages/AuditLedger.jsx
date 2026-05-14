@@ -1,6 +1,7 @@
 import React from "react"
 import { Clock, FileText } from "lucide-react"
 import { Pill, formatDateTime } from "../components/kit.jsx"
+import { API_BASE_URL } from "../../api/client.js"
 
 export default function AuditLedger({ logs, loading, elapsed, downloadLogPdf, submitLog, formatDuration }) {
   return (
@@ -62,16 +63,25 @@ export default function AuditLedger({ logs, loading, elapsed, downloadLogPdf, su
                     </td>
                     <td className="p-6">
                       <div className="flex items-center gap-2">
-                        {l.clock_in_photo && (
-                          <a href={l.clock_in_photo} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg overflow-hidden border border-stroke dark:border-slate-800 shadow-sm hover:scale-110 transition-transform">
-                            <img src={l.clock_in_photo} className="w-full h-full object-cover" />
-                          </a>
-                        )}
-                        {l.clock_out_photo && (
-                          <a href={l.clock_out_photo} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg overflow-hidden border border-stroke dark:border-slate-800 shadow-sm hover:scale-110 transition-transform">
-                            <img src={l.clock_out_photo} className="w-full h-full object-cover" />
-                          </a>
-                        )}
+                        {(() => {
+                          const host = API_BASE_URL.replace('/api', '')
+                          const getUrl = (p) => (p && p.startsWith('/') ? `${host}${p}` : p)
+                          
+                          return (
+                            <>
+                              {l.clock_in_photo && (
+                                <a href={getUrl(l.clock_in_photo)} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg overflow-hidden border border-stroke dark:border-slate-800 shadow-sm hover:scale-110 transition-transform">
+                                  <img src={getUrl(l.clock_in_photo)} className="w-full h-full object-cover" />
+                                </a>
+                              )}
+                              {l.clock_out_photo && (
+                                <a href={getUrl(l.clock_out_photo)} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg overflow-hidden border border-stroke dark:border-slate-800 shadow-sm hover:scale-110 transition-transform">
+                                  <img src={getUrl(l.clock_out_photo)} className="w-full h-full object-cover" />
+                                </a>
+                              )}
+                            </>
+                          )
+                        })()}
                         {!l.clock_in_photo && !l.clock_out_photo && <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600">N/A</span>}
                       </div>
                     </td>

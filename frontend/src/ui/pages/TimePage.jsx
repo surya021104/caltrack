@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react"
 import { createPortal } from "react-dom"
+import { useSearchParams } from "react-router-dom"
 
 import { apiRequest, unwrapResults, API_BASE_URL } from "../../api/client.js"
 import { getTokens } from "../../state/auth/tokens.js"
@@ -1044,13 +1045,16 @@ function AdminLogRow({ log, onAction }) {
 // ═══════════════════════════════════════════════════════════════
 function EmployeeTimePage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const urlTaskId = searchParams.get("task_id") || ""
+
   const displayName = user?.username
     ? user.username.charAt(0).toUpperCase() + user.username.slice(1)
     : "Employee"
 
   const [logs, setLogs] = useState([])
   const [assignedTasks, setAssignedTasks] = useState([])
-  const [selectedTaskId, setSelectedTaskId] = useState("")
+  const [selectedTaskId, setSelectedTaskId] = useState(urlTaskId)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -1360,7 +1364,14 @@ function EmployeeTimePage() {
   }
 
   // ─── Right panel state ──────────────────────────────────────
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(!!urlTaskId)
+
+  useEffect(() => {
+    if (urlTaskId) {
+      setSelectedTaskId(urlTaskId)
+      setPanelOpen(true)
+    }
+  }, [urlTaskId])
   const [moodRating, setMoodRating] = useState(null)
   const [showMoodSurvey, setShowMoodSurvey] = useState(false)
   const [moodNote, setMoodNote] = useState("")
@@ -1390,21 +1401,26 @@ function EmployeeTimePage() {
               setFaceVerifyStatus('verifying');
               setError('');
 
-              // Get clock-in photo URL
-              const clockInPhoto = openLog.clock_in_photo;
+              // Get clock-in photo URL and ensure it is absolute
+              let clockInPhoto = openLog.clock_in_photo;
+              if (clockInPhoto && clockInPhoto.startsWith('/')) {
+                const host = API_BASE_URL.replace('/api', '');
+                clockInPhoto = `${host}${clockInPhoto}`;
+              }
+
               if (clockInPhoto && preview) {
                 try {
                   const result = await verifyFaces(clockInPhoto, preview);
                   setFaceVerifyScore(result.score);
                   if (result.status === 'mismatch') {
                     setFaceVerifyStatus('mismatch');
-                    setError('⚠️ Identity Verification Failed: Your clock-out selfie does not match your clock-in photo. Please contact your manager or administrator to manually clock you out if you are trapped.');
-                    return; // BLOCK clock-out
+                    setError('⚠️ Identity Verification Anomaly: Your selfie does not match your clock-in photo. Your admin has been notified, but you may proceed to clock out.');
+                    // Proceed anyway instead of returning
                   }
                   if (result.status === 'no_face') {
                     setFaceVerifyStatus('no_face');
-                    setError('⚠️ No face detected in the photos! If your original clock-in photo was blurry or faceless, you cannot verify your identity to clock out. Please contact your admin to manually log or reset your shift.');
-                    return; // BLOCK clock-out
+                    setError('⚠️ No face detected in the photos! You may proceed, but please contact your admin to verify this shift manually.');
+                    // Proceed anyway instead of returning
                   }
                   setFaceVerifyStatus('matched');
                 } catch (err) {

@@ -28,7 +28,7 @@ function parseISODate(value) {
   return Number.isFinite(d.getTime()) ? d : null
 }
 
-function buildNotifications({ tasks, leaves, shifts, payroll, timesheet, isAdmin }) {
+function buildNotifications({ tasks, leaves, shifts, payroll, timesheet, sos, isAdmin }) {
   const now = new Date()
   const out = []
 
@@ -163,6 +163,23 @@ function buildNotifications({ tasks, leaves, shifts, payroll, timesheet, isAdmin
     })
   }
 
+  const sosItems = Array.isArray(sos) ? sos : unwrapResults(sos)
+  for (const s of sosItems) {
+    out.push({
+      id: `sos:active:${s.id}`,
+      kind: "sos",
+      when: parseISODate(s.timestamp),
+      to: routes.live_locations,
+      icon: { bg: "#FEF2F2", fg: "#E94560", el: <AlertCircle size={16} /> },
+      body: (
+        <span>
+          <span style={{ color: "#E94560", fontWeight: 900 }}>🆘 SOS ALERT:</span>{" "}
+          <span style={{ fontWeight: 800 }}>{s.employee_name}</span> needs assistance!
+        </span>
+      ),
+    })
+  }
+
   return out.filter(Boolean)
 }
 
@@ -231,9 +248,10 @@ export function NotificationCenter() {
       let leaves = []; try { leaves = await apiRequest("/leaves/") } catch(e) {}
       let shifts = []; try { shifts = await apiRequest("/scheduling/shifts/") } catch(e) {}
       let payroll = []; try { payroll = await apiRequest("/payroll/records/") } catch(e) {}
+      let sos = []; try { if (isAdmin) sos = await apiRequest("/live-locations/sos/") } catch(e) {}
       let timesheet = null; try { timesheet = await apiRequest("/time/timesheets/") } catch(e) {}
 
-      const next = buildNotifications({ tasks, leaves, shifts, payroll, timesheet, isAdmin })
+      const next = buildNotifications({ tasks, leaves, shifts, payroll, timesheet, sos, isAdmin })
       setItems(next)
     } catch {
       setError("Failed to load notifications.")

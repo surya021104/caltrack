@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, memo } from "react"
 import { createPortal } from "react-dom"
+import { useNavigate } from "react-router-dom"
 import { apiRequest, unwrapResults } from "../../api/client.js"
 import { useAuth } from "../../state/auth/useAuth.js"
 import { useRole } from "../../state/auth/useRole.js"
@@ -1135,6 +1136,7 @@ function EmployeeTasksPage({ tasks, handleAction, busy }) {
 export function TasksPage() {
   const { user } = useAuth()
   const { isAdmin } = useRole()
+  const navigate = useNavigate()
 
   const [tasks, setTasks] = useState([])
   const [employees, setEmployees] = useState([])
@@ -1206,6 +1208,12 @@ export function TasksPage() {
           body: JSON.stringify(body),
         })
       }
+      
+      if (action === "accept") {
+        navigate(`/time?task_id=${taskId}`)
+        return
+      }
+
       await loadTasks()
     } catch (e) { setError(e?.body?.detail || e.message || "Action failed.") }
     finally { setBusy(false) }

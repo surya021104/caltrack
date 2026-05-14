@@ -40,7 +40,7 @@ export function useWebSocket(path, { onMessage, onConnect, onDisconnect } = {}) 
     if (!mountedRef.current) return
 
     const tokens = getTokens()
-    if (!tokens?.access) {
+    if (!tokens?.access || !path) {
       setReadyState(WebSocket.CLOSED)
       return
     }
