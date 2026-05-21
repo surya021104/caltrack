@@ -5,7 +5,7 @@ import {
     Copy, RefreshCcw, Check,
     MoreHorizontal, ChevronRight,
     Columns, UserCircle, ShieldCheck,
-    Mail, Settings2, Archive, Edit3
+    Mail, Settings2, Archive, Edit3, Trash2
 } from "lucide-react"
 import "./SettingsSubpages.css"
 
@@ -548,6 +548,86 @@ function EditMemberModal({ member, onClose, onSave }) {
     )
 }
 
+function EditQueueItemModal({ item, onClose, onSave }) {
+    const [name, setName] = useState(item?.name || "")
+    const [email, setEmail] = useState(item?.email || "")
+    const [phone, setPhone] = useState(item?.phone || "")
+    const [dialCode, setDialCode] = useState(item?.dialCode || "+91")
+    const [role, setRole] = useState(item?.role || "employee")
+    const [err, setErr] = useState({})
+
+    function save() {
+        if (!name.trim()) return setErr({ name: "Name is required" })
+        onSave({ ...item, name, email, phone, dialCode, role })
+        onClose()
+    }
+
+    return (
+        <div className="psModalOverlay" onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="psModal" style={{ maxWidth: 500, width: "100%" }}>
+                <div className="psModalHeader">
+                    <h2 className="psModalTitle">Edit Queue Member</h2>
+                    <button className="psModalClose" onClick={onClose}><X size={18} /></button>
+                </div>
+                <div className="psModalBody">
+                    <div className="psMemberField" style={{ marginBottom: 16 }}>
+                        <label className="psFieldLabel">Full Name</label>
+                        <input
+                            className={`psMemberInput${err.name ? " error" : ""}`}
+                            placeholder="Full name *"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                        />
+                        {err.name && <span className="psFieldError">{err.name}</span>}
+                    </div>
+
+                    <div className="psMemberField" style={{ marginBottom: 16 }}>
+                        <label className="psFieldLabel">Email Address</label>
+                        <input
+                            className="psMemberInput"
+                            type="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="psMemberField">
+                        <label className="psFieldLabel">Phone Number</label>
+                        <div className="psPhoneInputGroup">
+                            <CountrySelector value={dialCode} onChange={setDialCode} />
+                            <input
+                                className="psPhoneInput"
+                                type="tel"
+                                placeholder="Phone number"
+                                value={phone}
+                                onChange={e => setPhone(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="psMemberField" style={{ marginTop: 16 }}>
+                        <label className="psFieldLabel">Access Role</label>
+                        <select
+                            className="psMemberInput"
+                            value={role}
+                            onChange={e => setRole(e.target.value)}
+                        >
+                            <option value="employee">Employee</option>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                        </select>
+                    </div>
+                </div>
+                <div className="psModalFooter">
+                    <button className="psCancelBtn" onClick={onClose}>Cancel</button>
+                    <button className="psSaveBtn" onClick={save}>Save</button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 /* ─── Main page ─────────────────────────────────────────────────── */
 const ROLES = ["Owner", "Admin", "Manager", "Employee", "Kiosk"]
 const GROUPS = ["No group", "Engineering", "HR", "Marketing", "Operations"]
@@ -562,9 +642,22 @@ export function PeopleSettingsPage() {
     const [showModal, setShowModal] = useState(false)
     const [showEditModal, setShowEditModal] = useState(false)
     const [editingMember, setEditingMember] = useState(null)
+    const [showQueueEditModal, setShowQueueEditModal] = useState(false)
+    const [editingQueueItem, setEditingQueueItem] = useState(null)
     const [members, setMembers] = useState([])
     const [queue, setQueue] = useState([])
     const [loading, setLoading] = useState(false)
+    const queueRef = useRef([])
+    const cancelledQueueIdsRef = useRef(new Set())
+    const processingQueueIdsRef = useRef(new Set())
+
+    function setQueueSafe(updater) {
+        setQueue(prev => {
+            const next = typeof updater === "function" ? updater(prev) : updater
+            queueRef.current = next
+            return next
+        })
+    }
 
     useEffect(() => {
         fetchMembers()
@@ -581,52 +674,67 @@ export function PeopleSettingsPage() {
 
     const handleAddMembers = async (newRows) => {
         setLoading(true)
-        const newQueueItems = newRows.map((r, i) => ({
-            id: `temp-${Date.now()}-${i}`,
-            name: r.name,
-            email: r.email || "—",
-            phone: r.phone ? `${r.dialCode} ${r.phone}` : "—",
-            status: "Processing"
-        }))
-
-        setQueue(prev => [...prev, ...newQueueItems])
-
-        for (const r of newRows) {
-            try {
-                // Prepare data for backend
-                const [firstName, ...lastNameParts] = r.name.split(" ")
-                const lastName = lastNameParts.join(" ") || "—"
-
-                const payload = {
-                    username: r.email || `user_${Math.random().toString(36).slice(2, 7)}`,
-                    password: "TemporaryPassword123!", // Should be handled by invite link normally
-                    email: r.email || "",
-                    first_name: firstName,
-                    last_name: lastName,
-                    role: r.role || "employee",
-                    phone: r.phone ? `${r.dialCode} ${r.phone}` : "",
-                    is_active: true
-                }
-
-                await apiRequest("/employees/", {
-                    method: "POST",
-                    json: payload
-                })
-
-                // After success, update member list and remove from queue
-                setQueue(prev => prev.filter(q => q.email !== r.email || q.name !== r.name))
-                fetchMembers()
-            } catch (err) {
-                console.error("Failed to add member:", err)
-                const errorMsg = err?.body?.detail ||
-                    (typeof err?.body === 'object' ? Object.values(err.body)[0] : null) ||
-                    err?.message || "Error"
-                setQueue(prev => prev.map(q =>
-                    (q.email === r.email && q.name === r.name) ? { ...q, status: errorMsg } : q
-                ))
+        const newQueueItems = newRows.map((r, i) => {
+            const id = `temp-${Date.now()}-${i}`
+            const dialCode = r.dialCode || "+91"
+            const phone = r.phone || ""
+            return {
+                id,
+                name: r.name,
+                email: r.email || "",
+                dialCode,
+                phone,
+                role: r.role || "employee",
+                status: "queued",
+                statusText: "Queued"
             }
-        }
+        })
+
+        setQueueSafe(prev => [...prev, ...newQueueItems])
+        for (const q of newQueueItems) await processQueueItem(q.id)
         setLoading(false)
+    }
+
+    async function processQueueItem(id) {
+        if (processingQueueIdsRef.current.has(id)) return
+        const item = queueRef.current.find(q => q.id === id)
+        if (!item) return
+        if (cancelledQueueIdsRef.current.has(id)) return
+
+        processingQueueIdsRef.current.add(id)
+        setQueueSafe(prev => prev.map(q => q.id === id ? { ...q, status: "processing", statusText: "Processing" } : q))
+
+        try {
+            const latest = queueRef.current.find(q => q.id === id)
+            if (!latest) return
+
+            const [firstNameRaw, ...lastNameParts] = (latest.name || "").trim().split(" ")
+            const firstName = firstNameRaw || ""
+            const lastName = lastNameParts.join(" ") || ""
+            const payload = {
+                username: latest.email || `user_${Math.random().toString(36).slice(2, 7)}`,
+                password: "TemporaryPassword123!",
+                email: latest.email || "",
+                first_name: firstName,
+                last_name: lastName,
+                role: latest.role || "employee",
+                phone: latest.phone ? `${latest.dialCode || ""} ${latest.phone}`.trim() : "",
+                is_active: true
+            }
+
+            await apiRequest("/employees/", { method: "POST", json: payload })
+            if (cancelledQueueIdsRef.current.has(id)) return
+            setQueueSafe(prev => prev.filter(q => q.id !== id))
+            fetchMembers()
+        } catch (err) {
+            if (cancelledQueueIdsRef.current.has(id)) return
+            const errorMsg = err?.body?.detail ||
+                (typeof err?.body === "object" ? Object.values(err.body)[0] : null) ||
+                err?.message || "Error"
+            setQueueSafe(prev => prev.map(q => q.id === id ? { ...q, status: "error", statusText: String(errorMsg) } : q))
+        } finally {
+            processingQueueIdsRef.current.delete(id)
+        }
     }
 
     const handleEditClick = (id) => {
@@ -663,6 +771,35 @@ export function PeopleSettingsPage() {
             alert("Failed to update member details.")
         }
         setLoading(false)
+    }
+
+    const handleQueueEditClick = (q) => {
+        setEditingQueueItem(q)
+        setShowQueueEditModal(true)
+    }
+
+    const handleSaveQueueEdit = async (data) => {
+        setQueueSafe(prev => prev.map(q => q.id === data.id ? {
+            ...q,
+            name: data.name,
+            email: data.email || "",
+            dialCode: data.dialCode || "+91",
+            phone: data.phone || "",
+            role: data.role || "employee",
+            status: processingQueueIdsRef.current.has(data.id) ? "processing" : "queued",
+            statusText: processingQueueIdsRef.current.has(data.id) ? "Processing" : "Queued"
+        } : q))
+
+        if (!processingQueueIdsRef.current.has(data.id)) await processQueueItem(data.id)
+    }
+
+    const handleQueueDeleteClick = (q) => {
+        const msg = q.status === "processing"
+            ? "Cancel processing and remove this member from the queue?"
+            : "Remove this member from the queue?"
+        if (!window.confirm(msg)) return
+        cancelledQueueIdsRef.current.add(q.id)
+        setQueueSafe(prev => prev.filter(x => x.id !== q.id))
     }
 
     const filtered = members.filter(m => {
@@ -818,20 +955,30 @@ export function PeopleSettingsPage() {
                                             <tr key={q.id}>
                                                 <td>{q.name}</td>
                                                 <td>{q.email}</td>
-                                                <td>{q.phone}</td>
+                                                <td>{q.phone ? `${q.dialCode || ""} ${q.phone}`.trim() : "—"}</td>
                                                 <td>
-                                                    <span className={`statusBadge ${q.status.toLowerCase()}`}>
-                                                        {q.status}
+                                                    <span className={`statusBadge ${q.status}`}>
+                                                        {q.statusText || "—"}
                                                     </span>
                                                 </td>
                                                 <td style={{ textAlign: "right" }}>
-                                                    <button
-                                                        className="psActionBtn"
-                                                        onClick={() => setQueue(p => p.filter(x => x.id !== q.id))}
-                                                        title="Remove from queue"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
+                                                    <div style={{ display: "inline-flex", gap: 8 }}>
+                                                        <button
+                                                            className="psActionBtn edit"
+                                                            onClick={() => handleQueueEditClick(q)}
+                                                            title="Edit"
+                                                            disabled={q.status === "processing"}
+                                                        >
+                                                            <Edit3 size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="psActionBtn delete"
+                                                            onClick={() => handleQueueDeleteClick(q)}
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
@@ -861,6 +1008,13 @@ export function PeopleSettingsPage() {
                     member={editingMember}
                     onClose={() => setShowEditModal(false)}
                     onSave={handleSaveEdit}
+                />
+            )}
+            {showQueueEditModal && editingQueueItem && (
+                <EditQueueItemModal
+                    item={editingQueueItem}
+                    onClose={() => setShowQueueEditModal(false)}
+                    onSave={handleSaveQueueEdit}
                 />
             )}
         </div>

@@ -681,10 +681,9 @@ function AuditTrailPanel({ apiBase }) {
   async function downloadPDF() {
     setDownloading(true)
     try {
-      const token = localStorage.getItem("quicktims.token")
       const base = apiBase || ""
       const res = await fetch(`${base}/api/compliance/audit-log/export/`, {
-        headers: { Authorization: `Bearer ${token}` }
+        credentials: "include",   // httpOnly cookie sent automatically
       })
       if (!res.ok) throw new Error("Export failed")
       const blob = await res.blob()

@@ -1,10 +1,17 @@
-import { getTokens, setTokens } from "../state/auth/tokens.js"
-import { isJwtExpired } from "../state/auth/jwt.js"
-import { getMock } from "./mockData.js"
+/**
+ * client.js
+ * Central API fetch wrapper.
+ *
+ * Tokens are stored as httpOnly cookies — JavaScript never touches them.
+ * Every request uses credentials: "include" so the browser sends them
+ * automatically.  On a 401 the client attempts a silent token refresh
+ * (POST /auth/refresh/ — server rotates the access cookie).  If that
+ * also fails the user is signed out via the session-expired event.
+ */
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api"
 
-// Track offline state so banner can be shown once
+// Track offline state so the banner can be shown once
 let _offline = false
 export function isOffline() { return _offline }
 
@@ -18,23 +25,23 @@ async function safeJson(res) {
   catch { return text }
 }
 
-async function refreshAccessToken(tokens) {
-  const res = await fetch(`${API_BASE_URL}/auth/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh: tokens.refresh })
-  })
-  if (!res.ok) return null
-  const data = await safeJson(res)
-  if (!data?.access) return null
-  return { ...tokens, access: data.access }
+/** Ask the server to rotate the access cookie using the refresh cookie. */
+async function _silentRefresh() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh/`, {
+      method: "POST",
+      credentials: "include",
+    })
+    return res.ok
+  } catch {
+    return false
+  }
 }
 
 export async function apiRequest(path, init = {}, attemptRefresh = true) {
-  // Deduplicate GET requests only
-  const method = (init.method || "GET").toUpperCase()
+  const method   = (init.method || "GET").toUpperCase()
   const cacheKey = method === "GET" ? path + JSON.stringify(init.params || "") : null
-  
+
   if (cacheKey && _pendingRequests.has(cacheKey)) {
     return _pendingRequests.get(cacheKey)
   }
@@ -52,59 +59,39 @@ export async function apiRequest(path, init = {}, attemptRefresh = true) {
 }
 
 async function _executeRequest(path, init = {}, attemptRefresh = true) {
-  let tokens = getTokens()
-
-  // Proactively refresh if access token is expired but refresh token exists
-  if (attemptRefresh && tokens?.access && tokens?.refresh && isJwtExpired(tokens.access)) {
-    const nextTokens = await refreshAccessToken(tokens)
-    if (nextTokens) {
-      setTokens(nextTokens)
-      tokens = nextTokens
-    } else {
-      setTokens(null)
-      window.dispatchEvent(new CustomEvent("quicktims:session-expired"))
-      throw { status: 401, body: { detail: "Session expired. Please log in again." } }
-    }
-  }
-
   const headers = new Headers(init.headers ?? {})
-  if (!headers.has("Content-Type") && init.json !== undefined) headers.set("Content-Type", "application/json")
-  if (tokens?.access) headers.set("Authorization", `Bearer ${tokens.access}`)
+  if (!headers.has("Content-Type") && init.json !== undefined) {
+    headers.set("Content-Type", "application/json")
+  }
 
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
+      credentials: "include",               // always send auth cookies
       headers,
-      body: init.json !== undefined ? JSON.stringify(init.json) : init.body
+      body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
     })
 
-    if (res.status === 401 && attemptRefresh && tokens?.refresh && tokens.access && isJwtExpired(tokens.access)) {
-      const nextTokens = await refreshAccessToken(tokens)
-      if (nextTokens) {
-        setTokens(nextTokens)
-        return apiRequest(path, init, false)
+    // 401 — try a silent token refresh then replay the original request once
+    if (res.status === 401 && attemptRefresh) {
+      const refreshed = await _silentRefresh()
+      if (refreshed) {
+        return _executeRequest(path, init, false)   // replay, no second refresh
       }
-      setTokens(null)
+      // Refresh also failed — force logout
       window.dispatchEvent(new CustomEvent("quicktims:session-expired"))
-    }
-
-    // Also handle 401 when no refresh token exists at all
-    if (res.status === 401 && !tokens?.access) {
-      window.dispatchEvent(new CustomEvent("quicktims:session-expired"))
+      throw { status: 401, body: { detail: "Session expired. Please log in again." } }
     }
 
     if (!res.ok) {
-      const err = { status: res.status, body: await safeJson(res) }
-      throw err
+      throw { status: res.status, body: await safeJson(res) }
     }
 
     _offline = false
     return safeJson(res)
 
   } catch (err) {
-    if (err && typeof err === "object" && "status" in err) {
-      throw err
-    }
+    if (err && typeof err === "object" && "status" in err) throw err
     _offline = true
     throw err
   }

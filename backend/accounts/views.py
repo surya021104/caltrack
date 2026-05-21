@@ -1,16 +1,65 @@
 import uuid
+import traceback
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import connection, transaction
+from companies.models import Company
 
 from rest_framework import permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 import requests
-from django.contrib.auth import get_user_model
-from django.db import connection
 
 from .serializers import UserSerializer
 from employees.utils import generate_next_employee_id
+
+
+# ── Cookie helper ─────────────────────────────────────────────────────────────
+
+def _set_auth_cookies(response, access_token, refresh_token=None):
+    """
+    Attach httpOnly JWT cookies to *response*.
+
+    Access cookie  — sent to every path (needed for all API calls).
+    Refresh cookie — restricted to /api/auth/refresh/ so it is never
+                     accidentally exposed to other endpoints.
+    """
+    secure   = getattr(settings, "AUTH_COOKIE_SECURE", not settings.DEBUG)
+    samesite = getattr(settings, "AUTH_COOKIE_SAMESITE", "Strict")
+
+    access_max_age  = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+    refresh_max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+
+    response.set_cookie(
+        settings.AUTH_COOKIE,
+        str(access_token),
+        max_age=access_max_age,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
+        path="/",
+    )
+    if refresh_token is not None:
+        response.set_cookie(
+            settings.AUTH_COOKIE_REFRESH,
+            str(refresh_token),
+            max_age=refresh_max_age,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+            path="/api/auth/refresh/",   # only sent to the refresh endpoint
+        )
+    return response
+
+
+def _clear_auth_cookies(response):
+    """Remove both auth cookies from the browser."""
+    response.delete_cookie(settings.AUTH_COOKIE, path="/")
+    response.delete_cookie(settings.AUTH_COOKIE_REFRESH, path="/api/auth/refresh/")
+    return response
 import uuid
 import traceback
 from django.db import transaction
@@ -72,14 +121,56 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-    
+
     def post(self, request, *args, **kwargs):
-        print(f"DEBUG: LoginView - POST request received: {request.data}")
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            access  = response.data.get("access")
+            refresh = response.data.get("refresh")
+            _set_auth_cookies(response, access, refresh)
+            # Strip tokens from the body — they live in httpOnly cookies now
+            response.data = {"success": True, "message": "Login successful."}
+        return response
 
 
-class RefreshView(TokenRefreshView):
-    pass
+class RefreshView(APIView):
+    """
+    Rotate the access token using the httpOnly refresh cookie.
+    No body needed — the browser sends the cookie automatically.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH)
+        if not refresh_token:
+            return Response(
+                {"success": False, "message": "No refresh token — please log in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+            token = RefreshToken(refresh_token)
+            access_token = token.access_token
+            response = Response({"success": True})
+            _set_auth_cookies(response, access_token)   # only rotate access cookie
+            return response
+        except Exception:
+            response = Response(
+                {"success": False, "message": "Session expired. Please log in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            _clear_auth_cookies(response)
+            return response
+
+
+class LogoutView(APIView):
+    """Clear both auth cookies — works whether or not the user is authenticated."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        response = Response({"success": True, "message": "Logged out."})
+        _clear_auth_cookies(response)
+        return response
 
 
 class GoogleLoginView(APIView):
@@ -161,6 +252,9 @@ class GoogleLoginView(APIView):
                     connection.set_schema_to_public()
 
         refresh = CustomTokenObtainPairSerializer.get_token(user)
+        response = Response({"success": True, "message": "Google login successful."})
+        _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        return response
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
@@ -251,11 +345,12 @@ class RegisterView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         refresh = CustomTokenObtainPairSerializer.get_token(user)
-        return Response({
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": UserSerializer(user).data
-        }, status=status.HTTP_201_CREATED)
+        response = Response(
+            {"success": True, "message": "Registration successful.", "user": UserSerializer(user).data},
+            status=status.HTTP_201_CREATED,
+        )
+        _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        return response
 
 
 class MeView(APIView):

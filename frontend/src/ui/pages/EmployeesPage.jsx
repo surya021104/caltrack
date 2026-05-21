@@ -4,7 +4,7 @@ import { apiRequest, unwrapResults } from "../../api/client.js"
 import { useAuth } from "../../state/auth/useAuth.js"
 import { useRole } from "../../state/auth/useRole.js"
 import { Button, Card, Input, Pill } from "../components/kit.jsx"
-import { Loader2, ShieldCheck, ShieldOff, AlertTriangle, ChevronDown, ChevronUp, Users } from "lucide-react"
+import { Loader2, ShieldCheck, ShieldOff, AlertTriangle, ChevronDown, ChevronUp, Users, Edit3, Trash2, X } from "lucide-react"
 import { fireSparkleFromEl } from "../sparkle.js"
 
 // ── Exempt status badge ─────────────────────────────────────────────────────
@@ -23,6 +23,206 @@ function ExemptBadge({ status }) {
     <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
       <AlertTriangle size={11} /> PENDING
     </span>
+  )
+}
+
+function EditEmployeeModal({ employee, onClose, onSave, saving }) {
+  const [email, setEmail] = useState(employee.user?.email || "")
+  const [firstName, setFirstName] = useState(employee.user?.first_name || "")
+  const [lastName, setLastName] = useState(employee.user?.last_name || "")
+  const [title, setTitle] = useState(employee.title || "")
+  const [hourlyRate, setHourlyRate] = useState(employee.hourly_rate ?? "")
+  const [country, setCountry] = useState(employee.country || "US")
+  const [state, setState] = useState(employee.state || "")
+  const [exemptStatus, setExemptStatus] = useState(employee.exempt_status || "non_exempt")
+  const [weeklySalary, setWeeklySalary] = useState(employee.weekly_salary ?? "")
+  const [ukTaxCode, setUkTaxCode] = useState(employee.uk_tax_code || "1257L")
+  const [ukNiCategory, setUkNiCategory] = useState(employee.uk_ni_category || "A")
+  const [rolledUpHolidayPay, setRolledUpHolidayPay] = useState(!!employee.rolled_up_holiday_pay)
+  const [isActive, setIsActive] = useState(employee.is_active !== false)
+
+  async function submit() {
+    await onSave({
+      id: employee.id,
+      user: employee.user,
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      title,
+      hourly_rate: hourlyRate,
+      country,
+      state,
+      exempt_status: exemptStatus,
+      weekly_salary: weeklySalary,
+      uk_tax_code: ukTaxCode,
+      uk_ni_category: ukNiCategory,
+      rolled_up_holiday_pay: rolledUpHolidayPay,
+      is_active: isActive,
+    })
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-[860px] bg-white dark:bg-slate-950 rounded-3xl border border-stroke dark:border-slate-800 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-8 py-6 border-b border-stroke dark:border-slate-800 bg-surface dark:bg-slate-900/60">
+          <div className="flex flex-col">
+            <div className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Edit Employee</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1">
+              {employee.employee_id} · {employee.user?.username || "—"}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="p-2 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-300"
+            onClick={onClose}
+            disabled={saving}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-8 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
+            <Input label="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            <Input label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <Input label="Hourly rate" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} placeholder="e.g. 18.50" />
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] ml-1">Status</label>
+              <button
+                type="button"
+                className={`h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 text-sm font-black uppercase tracking-widest transition-all ${
+                  isActive
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                    : "bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300"
+                }`}
+                onClick={() => setIsActive(v => !v)}
+                disabled={saving}
+              >
+                {isActive ? "Active" : "Inactive"}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-stroke dark:border-slate-800 overflow-hidden bg-surface dark:bg-slate-950/20 shadow-sm">
+            <div className="px-8 py-5 bg-surface2 dark:bg-slate-900/50 border-b border-stroke dark:border-slate-800">
+              <div className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Region & Compliance</div>
+            </div>
+
+            <div className="p-8 space-y-7">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Country</label>
+                  <select
+                    value={country}
+                    onChange={e => setCountry(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                    disabled={saving}
+                  >
+                    <option value="US">🇺🇸 United States</option>
+                    <option value="UK">🇬🇧 United Kingdom</option>
+                  </select>
+                </div>
+
+                {country === "US" ? (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] ml-1">State (2-letter code)</label>
+                      <input
+                        className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        value={state}
+                        onChange={e => setState(e.target.value.toUpperCase())}
+                        maxLength={2}
+                        placeholder="e.g. CA"
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Exempt Status</label>
+                      <select
+                        value={exemptStatus}
+                        onChange={e => setExemptStatus(e.target.value)}
+                        className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                        disabled={saving}
+                      >
+                        <option value="non_exempt">Non-Exempt</option>
+                        <option value="exempt">Exempt</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1 md:col-span-3">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] ml-1">Weekly Salary (USD)</label>
+                      <input
+                        className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        type="number"
+                        value={weeklySalary}
+                        onChange={e => setWeeklySalary(e.target.value)}
+                        placeholder="e.g. 1200"
+                        step="0.01"
+                        disabled={saving}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] ml-1">Tax Code</label>
+                      <input
+                        className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        value={ukTaxCode}
+                        onChange={e => setUkTaxCode(e.target.value)}
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">NI Category</label>
+                      <select
+                        value={ukNiCategory}
+                        onChange={e => setUkNiCategory(e.target.value)}
+                        className="w-full h-11 px-4 rounded-xl border border-stroke dark:border-slate-800 bg-bg dark:bg-slate-950/60 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                        disabled={saving}
+                      >
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="H">H</option>
+                        <option value="J">J</option>
+                        <option value="M">M</option>
+                        <option value="Z">Z</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-3 md:col-span-3">
+                      <input
+                        id="editRolledUpHolidayPay"
+                        type="checkbox"
+                        checked={rolledUpHolidayPay}
+                        onChange={e => setRolledUpHolidayPay(e.target.checked)}
+                        disabled={saving}
+                        style={{ width: 18, height: 18, cursor: saving ? "not-allowed" : "pointer" }}
+                      />
+                      <label htmlFor="editRolledUpHolidayPay" className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Rolled-up Holiday Pay
+                      </label>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-8 py-6 border-t border-stroke dark:border-slate-800 bg-surface dark:bg-slate-900/60 flex justify-end gap-3">
+          <Button variant="ghost" type="button" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="button" onClick={submit} disabled={saving}>
+            {saving ? <span className="inline-flex items-center gap-2"><Loader2 className="animate-spin" size={16} />Saving…</span> : "Save changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -56,6 +256,10 @@ export function EmployeesPage() {
   const [ukNiCategory, setUkNiCategory] = useState("A")
   const [rolledUpHolidayPay, setRolledUpHolidayPay] = useState(false)
   const [showComplianceFields, setShowComplianceFields] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
 
   const activeCount = useMemo(() => items.filter((e) => e.is_active).length, [items])
 
@@ -74,6 +278,115 @@ export function EmployeesPage() {
   }
 
   useEffect(() => { load() }, [isAdmin])
+
+  function openEdit(employee) {
+    setEditingEmployee(employee)
+    setShowEditModal(true)
+  }
+
+  async function saveEdit(data) {
+    setSavingEdit(true)
+    setError("")
+    try {
+      const original = items.find(e => e.id === data.id) || editingEmployee
+      const payload = {
+        username: data.user?.username,
+        email: data.email || "",
+        first_name: data.first_name || "",
+        last_name: data.last_name || "",
+        title: data.title || "",
+        hourly_rate: data.hourly_rate === "" || data.hourly_rate === null || typeof data.hourly_rate === "undefined" ? 0 : Number(data.hourly_rate),
+        country: data.country || null,
+        state: data.country === "US" ? (data.state || null) : null,
+        exempt_status: data.country === "US" ? (data.exempt_status || "non_exempt") : null,
+        weekly_salary: data.country === "US" ? (data.weekly_salary === "" || data.weekly_salary === null || typeof data.weekly_salary === "undefined" ? null : Number(data.weekly_salary)) : null,
+        uk_tax_code: data.country === "UK" ? (data.uk_tax_code || null) : null,
+        uk_ni_category: data.country === "UK" ? (data.uk_ni_category || null) : null,
+        rolled_up_holiday_pay: data.country === "UK" ? !!data.rolled_up_holiday_pay : false,
+        is_active: !!data.is_active,
+      }
+
+      const res = await apiRequest(`/employees/${data.id}/`, { method: "PATCH", json: payload })
+      const updated = res?.data || res
+      if (updated && typeof updated === "object") {
+        setItems(prev => prev.map(emp => {
+          if (emp.id !== data.id) return emp
+          const nextUser = updated.user ? { ...(emp.user || {}), ...updated.user } : emp.user
+          return { ...emp, ...updated, user: nextUser }
+        }))
+      }
+
+      const verified = await apiRequest(`/employees/${data.id}/`).catch(() => null)
+      const verifiedObj = verified?.data || verified
+      if (verifiedObj && typeof verifiedObj === "object") {
+        const sameTitle = String(verifiedObj.title || "") === String(payload.title || "")
+        const sameRate = Number(verifiedObj.hourly_rate ?? 0) === Number(payload.hourly_rate ?? 0)
+        const sameActive = !!verifiedObj.is_active === !!payload.is_active
+        const sameEmail = String(verifiedObj.user?.email || verifiedObj.email || "") === String(payload.email || "")
+        if (!(sameTitle && sameRate && sameActive && sameEmail) && original) {
+          const putPayload = {
+            employee_id: original.employee_id,
+            username: original.user?.username || payload.username,
+            email: payload.email,
+            first_name: payload.first_name,
+            last_name: payload.last_name,
+            title: payload.title,
+            hourly_rate: payload.hourly_rate,
+            country: payload.country,
+            state: payload.state,
+            exempt_status: payload.exempt_status,
+            weekly_salary: payload.weekly_salary,
+            uk_tax_code: payload.uk_tax_code,
+            uk_ni_category: payload.uk_ni_category,
+            rolled_up_holiday_pay: payload.rolled_up_holiday_pay,
+            is_active: payload.is_active,
+          }
+          const putRes = await apiRequest(`/employees/${data.id}/`, { method: "PUT", json: putPayload })
+          const putUpdated = putRes?.data || putRes
+          if (putUpdated && typeof putUpdated === "object") {
+            setItems(prev => prev.map(emp => {
+              if (emp.id !== data.id) return emp
+              const nextUser = putUpdated.user ? { ...(emp.user || {}), ...putUpdated.user } : emp.user
+              return { ...emp, ...putUpdated, user: nextUser }
+            }))
+          }
+        }
+      }
+
+      setSuccessMsg(`Employee "${data.user?.username || data.email || data.id}" updated.`)
+      setTimeout(() => setSuccessMsg(""), 6000)
+      setShowEditModal(false)
+      setEditingEmployee(null)
+      await load()
+    } catch (err) {
+      setError(err?.body?.detail || "Failed to update employee.")
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  async function deleteEmployee(employee) {
+    if (!window.confirm(`Delete employee "${employee.user?.username || employee.employee_id || employee.id}"?`)) return
+    setDeletingId(employee.id)
+    setError("")
+    try {
+      await apiRequest(`/employees/${employee.id}/`, { method: "DELETE" })
+      setSuccessMsg("Employee deleted.")
+      setTimeout(() => setSuccessMsg(""), 6000)
+      await load()
+    } catch (err) {
+      try {
+        await apiRequest(`/employees/${employee.id}/`, { method: "PATCH", json: { is_active: false } })
+        setSuccessMsg("Employee deactivated.")
+        setTimeout(() => setSuccessMsg(""), 6000)
+        await load()
+      } catch {
+        setError(err?.body?.detail || "Failed to delete employee.")
+      }
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   async function createEmployee(e) {
     e.preventDefault()
@@ -358,6 +671,7 @@ export function EmployeesPage() {
                     <th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">Classification</th>
                     <th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest">UK Payroll</th>
                     <th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest text-right">Status</th>
+                    <th className="px-6 py-4 text-[11px] font-black text-slate-500 dark:text-slate-500 uppercase tracking-widest text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stroke dark:divide-slate-800">
@@ -366,7 +680,7 @@ export function EmployeesPage() {
                       <td className="px-6 py-5 font-bold text-slate-900 dark:text-white">{e.employee_id}</td>
                       <td className="px-6 py-5 text-slate-600 dark:text-slate-400">
                         <div className="font-bold">{e.user?.username}</div>
-                        {e.user?.email && <div className="text-[11px] opacity-60 font-medium">{e.user.email}</div>}
+                        {(e.user?.email || e.email) && <div className="text-[11px] opacity-60 font-medium">{e.user?.email || e.email}</div>}
                       </td>
                       <td className="px-6 py-5 text-slate-700 dark:text-slate-300">{e.title || "—"}</td>
                       <td className="px-6 py-5 text-right font-black text-slate-900 dark:text-white">
@@ -408,6 +722,28 @@ export function EmployeesPage() {
                       <td className="px-6 py-5 text-right">
                         <Pill tone={e.is_active ? "good" : "bad"}>{e.is_active ? "active" : "inactive"}</Pill>
                       </td>
+                      <td className="px-6 py-5 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="p-2 rounded-xl border border-stroke dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 transition-colors disabled:opacity-40"
+                            title="Edit"
+                            onClick={() => openEdit(e)}
+                            disabled={deletingId === e.id}
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="p-2 rounded-xl border border-stroke dark:border-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 dark:text-rose-400 transition-colors disabled:opacity-40"
+                            title="Delete"
+                            onClick={() => deleteEmployee(e)}
+                            disabled={deletingId === e.id}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -418,6 +754,15 @@ export function EmployeesPage() {
           )}
         </Card>
       </div>
+
+      {showEditModal && editingEmployee && (
+        <EditEmployeeModal
+          employee={editingEmployee}
+          onClose={() => { if (!savingEdit) { setShowEditModal(false); setEditingEmployee(null) } }}
+          onSave={saveEdit}
+          saving={savingEdit}
+        />
+      )}
     </div>
   )
 }

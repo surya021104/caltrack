@@ -679,6 +679,11 @@ a.psHighlight:hover {
     color: #854d0e;
 }
 
+.statusBadge.queued {
+    background: #e0f2fe;
+    color: #075985;
+}
+
 .statusBadge.error {
     background: #fee2e2;
     color: #991b1b;
@@ -700,6 +705,16 @@ a.psHighlight:hover {
 }
 
 .psActionBtn:hover {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+.psActionBtn.edit:hover {
+    color: #4f46e5;
+    background: #eef2ff;
+}
+
+.psActionBtn.delete:hover {
     color: #ef4444;
     background: #fef2f2;
 }

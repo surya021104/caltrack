@@ -176,7 +176,8 @@ SILENCED_SYSTEM_CHECKS = []
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Cookie-first auth — also accepts Bearer header for API clients / mobile.
+        "accounts.authentication.CookieJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -191,7 +192,19 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+# ── httpOnly JWT Cookie settings ─────────────────────────────────────────────
+AUTH_COOKIE          = "qt_access"         # access token cookie name
+AUTH_COOKIE_REFRESH  = "qt_refresh"        # refresh token cookie name
+AUTH_COOKIE_SECURE   = not DEBUG           # HTTPS-only in production; False in dev
+AUTH_COOKIE_SAMESITE = "Strict"            # blocks CSRF entirely
+
+# ── CORS — must name origins explicitly when credentials=True ────────────────
+# CORS_ALLOW_ALL_ORIGINS + CORS_ALLOW_CREDENTIALS together are rejected by browsers.
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
