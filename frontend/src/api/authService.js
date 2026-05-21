@@ -89,6 +89,28 @@ export async function apiGoogleLogin(googleAccessToken) {
 }
 
 /**
+ * Request password reset email.
+ */
+export async function apiPasswordResetRequest(email) {
+  return fetchJSON("/auth/password-reset/request/", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  })
+}
+
+/**
+ * Confirm password reset with token.
+ */
+export async function apiPasswordResetConfirm(payload) {
+  return fetchJSON("/auth/password-reset/confirm/", {
+    method: "POST",
+    body: JSON.stringify(payload), // { uid, token, new_password }
+  })
+}
+
+// ── Error normalization ───────────────────────────────────────────────────────
+
+/**
  * Logout — tells the server to clear both auth cookies.
  */
 export async function apiLogout() {

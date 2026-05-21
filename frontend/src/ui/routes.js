@@ -39,4 +39,7 @@ export const routes = {
   settings_data: "/settings/data",
   onboarding: "/onboarding",
   compliance: "/compliance",
+  accept_invite: "/accept-invite",
+  settings_invoices: "/settings/invoices",
+  reset_password: "/reset-password",
 }

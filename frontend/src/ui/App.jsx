@@ -8,8 +8,16 @@ import { SessionToast } from "./components/SessionToast.jsx"
 import { LoginPage } from "./pages/LoginPage.jsx"
 
 // Lazy-loaded Pages
+const AcceptInvitePage = lazy(() =>
+  import("./pages/AcceptInvitePage.jsx").then(m => ({ default: m.AcceptInvitePage }))
+)
+
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage.jsx").then(m => ({ default: m.DashboardPage }))
+)
+
+const ResetPasswordPage = lazy(() =>
+  import("./pages/ResetPasswordPage.jsx").then(m => ({ default: m.ResetPasswordPage }))
 )
 
 const LocationsPage = lazy(() =>
@@ -161,6 +169,24 @@ export function App() {
             path={routes.onboarding}
             element={<Navigate to={routes.login} replace />}
           />
+          
+          <Route
+            path={routes.reset_password}
+            element={
+              user ? <Navigate to={routes.dashboard} replace /> : <ResetPasswordPage />
+            }
+          />
+
+          <Route
+            path={routes.accept_invite}
+            element={
+              user ? (
+                <Navigate to={routes.dashboard} replace />
+              ) : (
+                <AcceptInvitePage />
+              )
+            }
+          />
 
           {/* ── Authenticated shell ── */}
           <Route
@@ -223,6 +249,7 @@ export function App() {
               <Route path={routes.settings_integrations}  element={<SettingsPage section="integrations" />} />
               <Route path={routes.settings_developer}     element={<SettingsPage section="developer" />} />
               <Route path={routes.settings_billing}       element={<SettingsPage section="billing" />} />
+              <Route path={routes.settings_invoices}      element={<SettingsPage section="invoices" />} />
               <Route path={routes.settings_data}          element={<SettingsPage section="data" />} />
             </Route>
           </Route>

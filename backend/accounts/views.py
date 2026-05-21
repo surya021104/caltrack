@@ -60,6 +60,16 @@ def _clear_auth_cookies(response):
     response.delete_cookie(settings.AUTH_COOKIE, path="/")
     response.delete_cookie(settings.AUTH_COOKIE_REFRESH, path="/api/auth/refresh/")
     return response
+import uuid
+import traceback
+from django.db import transaction
+from companies.models import Company
+from settings_hub.models import TeamInvite
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.core.mail import send_mail
+from django.conf import settings
 
 
 
@@ -182,6 +192,11 @@ class GoogleLoginView(APIView):
             
         User = get_user_model()
         user = User.objects.filter(email=email).first()
+        
+        # Check for pending invitations for this email
+        from settings_hub.models import TeamInvite
+        invite = TeamInvite.objects.filter(email__iexact=email, status="pending").first()
+
         if not user:
             username = email.split("@")[0]
             base_username = username
@@ -197,15 +212,54 @@ class GoogleLoginView(APIView):
                 last_name=user_info.get("family_name", ""),
             )
             user.set_unusable_password()
-            user.save()
-            # Note: Employee profile is NOT created here because company is required.
-            # The user will be prompted to create/join a company via the onboarding flow,
-            # and an Employee profile will be created at that point.
             
+            # If they have an invite, link them to the company immediately
+            if invite:
+                user.company = invite.company
+                user.role = invite.role
+                
+            user.save()
+
+        # If user exists but wasn't linked to a company, and now has an invite
+        elif invite and not user.company:
+            user.company = invite.company
+            user.role = invite.role
+            user.save(update_fields=["company", "role"])
+
+        # Handle invitation acceptance logic
+        if invite:
+            with transaction.atomic():
+                invite.status = "accepted"
+                from django.utils import timezone
+                invite.accepted_at = timezone.now()
+                invite.save(update_fields=["status", "accepted_at"])
+
+                # Ensure Employee profile exists in tenant schema
+                if hasattr(connection, 'set_tenant'):
+                    connection.set_tenant(invite.company)
+                
+                from employees.models import Employee
+                Employee.objects.get_or_create(
+                    user=user,
+                    company=invite.company,
+                    defaults={
+                        "employee_id": generate_next_employee_id(invite.company),
+                        "title": invite.role.title(),
+                        "hourly_rate": 0,
+                    }
+                )
+                if hasattr(connection, 'set_schema_to_public'):
+                    connection.set_schema_to_public()
+
         refresh = CustomTokenObtainPairSerializer.get_token(user)
         response = Response({"success": True, "message": "Google login successful."})
         _set_auth_cookies(response, str(refresh.access_token), str(refresh))
         return response
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data
+        })
 
 
 class RegisterView(APIView):
@@ -413,3 +467,163 @@ class TwoFactorSetupView(APIView):
         request.user.totp_secret = ""
         request.user.save(update_fields=["two_fa_enabled", "totp_secret"])
         return Response({"success": True, "message": "2FA disabled."})
+
+
+class AcceptInviteView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        password = request.data.get("password")
+        org_schema = request.data.get("org") # Get schema from URL/request
+        first_name = request.data.get("first_name", "")
+        last_name = request.data.get("last_name", "")
+
+        if not token or not password:
+            return Response({"detail": "Token and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle multi-tenant lookup
+        if org_schema:
+            if hasattr(connection, 'set_tenant'):
+                from companies.models import Company
+                company = Company.objects.filter(schema_name=org_schema).first()
+                if company:
+                    connection.set_tenant(company)
+        
+        invite = TeamInvite.objects.filter(token=token, status="pending").first()
+        
+        # Fallback: if not found in current schema, search all schemas
+        if not invite:
+            from django_tenants.utils import schema_context
+            from companies.models import Company
+            for company in Company.objects.all():
+                with schema_context(company.schema_name):
+                    invite = TeamInvite.objects.filter(token=token, status="pending").first()
+                    if invite:
+                        # Once found, set the tenant for the rest of the transaction
+                        if hasattr(connection, 'set_tenant'):
+                            connection.set_tenant(company)
+                        break
+
+        if not invite:
+            return Response({"detail": "Invalid or expired invitation token."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if invite.is_expired:
+            invite.status = "expired"
+            invite.save(update_fields=["status"])
+            return Response({"detail": "Invitation has expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        if User.objects.filter(email__iexact=invite.email).exists():
+            return Response({"detail": "User with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                username = invite.email.split("@")[0]
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user = User.objects.create_user(
+                    username=username,
+                    password=password,
+                    email=invite.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=invite.role,
+                )
+                user.company = invite.company
+                user.save()
+
+                invite.status = "accepted"
+                from django.utils import timezone
+                invite.accepted_at = timezone.now()
+                invite.save(update_fields=["status", "accepted_at"])
+
+            if hasattr(connection, 'set_tenant'):
+                connection.set_tenant(invite.company)
+
+            from employees.models import Employee
+            Employee.objects.get_or_create(
+                user=user,
+                company=invite.company,
+                defaults={
+                    "employee_id": generate_next_employee_id(invite.company),
+                    "title": invite.role.title(),
+                    "hourly_rate": 0,
+                }
+            )
+
+            if hasattr(connection, 'set_schema_to_public'):
+                connection.set_schema_to_public()
+
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        refresh = CustomTokenObtainPairSerializer.get_token(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+            "message": "Login successfully"
+        }, status=status.HTTP_201_CREATED)
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"detail": "Email is required"}, status=400)
+            
+        User = get_user_model()
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
+            token_generator = PasswordResetTokenGenerator()
+            token = token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Fallback frontend URL if not defined
+            frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:5173")
+            reset_url = f"{frontend_url}/reset-password?uid={uid}&token={token}"
+            
+            try:
+                send_mail(
+                    "Password Reset Request",
+                    f"Click the link below to reset your password:\n\n{reset_url}\n\nIf you did not request this, please ignore this email.",
+                    "noreply@caltrack.com",
+                    [email],
+                    fail_silently=True,
+                )
+            except Exception as e:
+                print(f"Failed to send email: {e}")
+        
+        # Always return success to prevent email enumeration
+        return Response({"detail": "If an account exists with that email, a password reset link has been sent."})
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        uidb64 = request.data.get("uid")
+        token = request.data.get("token")
+        new_password = request.data.get("new_password")
+        
+        if not uidb64 or not token or not new_password:
+            return Response({"detail": "Missing required fields"}, status=400)
+            
+        User = get_user_model()
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+            
+        if user is not None and PasswordResetTokenGenerator().check_token(user, token):
+            user.set_password(new_password)
+            user.save()
+            return Response({"detail": "Password has been reset successfully."})
+        return Response({"detail": "Invalid or expired token"}, status=400)

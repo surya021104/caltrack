@@ -99,6 +99,9 @@ async function _executeRequest(path, init = {}, attemptRefresh = true) {
 
 export function unwrapResults(value) {
   if (Array.isArray(value)) return value
-  if (value && typeof value === "object" && Array.isArray(value.results)) return value.results
+  if (value && typeof value === "object") {
+    if (Array.isArray(value.data)) return value.data
+    if (Array.isArray(value.results)) return value.results
+  }
   return []
 }
