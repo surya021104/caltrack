@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css"
 import { Search, MapPin, X, ChevronDown, Info, Archive } from "lucide-react"
 
 import { apiRequest, unwrapResults } from "../../api/client.js"
+import { getAddress } from "../../api/geocoding"
 
 /* ── Fix default Leaflet marker icons ─────────────────────────── */
 delete L.Icon.Default.prototype._getIconUrl
@@ -111,9 +112,38 @@ export function LocationsSettingsPage() {
   const [viewMode, setViewMode] = useState("map") // "map" | "list"
 
   /* ── Map center ────────────────────────────────────────────── */
-  const defaultCenter = [12.9716, 80.0414] // Chennai area
+  const defaultCenter = [12.7550337, 77.8376261] // Samathuvapuram, Hosur
   const [mapCenter, setMapCenter] = useState(defaultCenter)
   const [mapZoom, setMapZoom] = useState(5)
+
+  /* ── User Geolocation ──────────────────────────────────────── */
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          setMapCenter([lat, lng])
+          setMapZoom(16) // Zoom in closer once we have accurate location
+          
+          // Reverse geocode to show as text
+          const address = await getAddress(lat, lng)
+          if (address) {
+            setSearchQuery(address)
+          }
+        },
+        (error) => {
+          console.warn("Could not get user location:", error)
+          setMapCenter(defaultCenter)
+          setMapZoom(16)
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    } else {
+      setMapCenter(defaultCenter)
+      setMapZoom(16)
+    }
+  }, [])
 
   /* ── Load saved locations on mount ─────────────────────────── */
   useEffect(() => {
@@ -168,56 +198,75 @@ export function LocationsSettingsPage() {
       setSearchResults([])
       return
     }
-    if (autocompleteService.current) {
+    /* ── Nominatim Fallback function ───────────────────────────── */
+    const runNominatimFallback = () => {
+      let cancelled = false
       setSearching(true)
-      autocompleteService.current.getPlacePredictions(
-        { input: debouncedQuery, types: [] },
-        (predictions, status) => {
+      fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(debouncedQuery)}&format=json&limit=8&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return
           setSearching(false)
-          if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
-            setSearchResults([])
-            return
-          }
           setSearchResults(
-            predictions.map((p) => ({
-              id: p.place_id,
-              placeId: p.place_id,
-              name: p.structured_formatting?.main_text || p.description.split(",")[0],
-              secondaryText: p.structured_formatting?.secondary_text || "",
-              fullAddress: p.description,
-              lat: null,
-              lng: null,
+            data.map((d) => ({
+              id: d.place_id, placeId: null,
+              name: d.display_name.split(",")[0],
+              secondaryText: d.display_name.split(",").slice(1).join(",").trim(),
+              fullAddress: d.display_name,
+              lat: parseFloat(d.lat), lng: parseFloat(d.lon),
             }))
           )
           setShowDropdown(true)
-        }
-      )
+        })
+        .catch((err) => {
+          if (cancelled) return
+          console.error("Nominatim search error:", err)
+          setSearching(false)
+          setSearchResults([])
+        })
+      return () => { cancelled = true }
+    }
+
+    if (autocompleteService.current) {
+      setSearching(true)
+      try {
+        autocompleteService.current.getPlacePredictions(
+          {
+            input: debouncedQuery,
+          },
+          (predictions, status) => {
+            if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
+              console.warn("Google Places failed (Status:", status, ") — Using Nominatim fallback")
+              runNominatimFallback()
+              return
+            }
+            setSearching(false)
+            setSearchResults(
+              predictions.map((p) => ({
+                id: p.place_id,
+                placeId: p.place_id,
+                name: p.structured_formatting?.main_text || p.description.split(",")[0],
+                secondaryText: p.structured_formatting?.secondary_text || "",
+                fullAddress: p.description,
+                lat: null,
+                lng: null,
+              }))
+            )
+            setShowDropdown(true)
+          }
+        )
+      } catch (err) {
+        console.error("Autocomplete error:", err)
+        runNominatimFallback()
+      }
       return
     }
-    // Nominatim fallback
-    let cancelled = false
-    setSearching(true)
-    fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(debouncedQuery)}&format=json&limit=8&addressdetails=1`,
-      { headers: { "Accept-Language": "en" } }
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        setSearchResults(
-          data.map((d) => ({
-            id: d.place_id, placeId: null,
-            name: d.display_name.split(",")[0],
-            secondaryText: d.display_name.split(",").slice(1).join(",").trim(),
-            fullAddress: d.display_name,
-            lat: parseFloat(d.lat), lng: parseFloat(d.lon),
-          }))
-        )
-        setShowDropdown(true)
-      })
-      .catch(() => { })
-      .finally(() => { if (!cancelled) setSearching(false) })
-    return () => { cancelled = true }
+
+    /* ── If no Google key, run Nominatim directly ──────────────── */
+    return runNominatimFallback()
   }, [debouncedQuery])
 
   /* ── Close dropdown on outside click ───────────────────────── */
@@ -233,20 +282,22 @@ export function LocationsSettingsPage() {
 
   /* ── Select a search result ────────────────────────────────── */
   const handleSelectPlace = (place) => {
-    setSearchQuery(place.name)
+    setSearchQuery(place.fullAddress || place.name)
     setShowDropdown(false)
     setShowAddPanel(false)
     if (place.placeId && placesService.current) {
       placesService.current.getDetails(
-        { placeId: place.placeId, fields: ["geometry", "formatted_address", "name"] },
+        { placeId: place.placeId, fields: ["geometry", "formatted_address", "name", "address_components"] },
         (result, status) => {
           if (status === window.google.maps.places.PlacesServiceStatus.OK && result?.geometry?.location) {
             const lat = result.geometry.location.lat()
             const lng = result.geometry.location.lng()
-            const resolved = { ...place, lat, lng, fullAddress: result.formatted_address || place.fullAddress, name: result.name || place.name }
+            const resolvedAddress = result.formatted_address || place.fullAddress
+            const resolved = { ...place, lat, lng, fullAddress: resolvedAddress, name: result.name || place.name }
             setSelectedPlace(resolved)
+            setSearchQuery(resolvedAddress)
             setMapCenter([lat, lng])
-            setMapZoom(16)
+            setMapZoom(17)
           }
         }
       )
@@ -255,7 +306,7 @@ export function LocationsSettingsPage() {
     if (place.lat && place.lng) {
       setSelectedPlace(place)
       setMapCenter([place.lat, place.lng])
-      setMapZoom(15)
+      setMapZoom(16)
     }
   }
 
@@ -428,8 +479,8 @@ export function LocationsSettingsPage() {
                       <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {r.name}
                       </div>
-                      <div style={{ fontSize: "12px", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
-                        {r.secondaryText || r.fullAddress.split(",").slice(1).join(",").trim()}
+                      <div style={{ fontSize: "12px", color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2, maxWidth: '400px' }}>
+                        {r.fullAddress}
                       </div>
                     </div>
                   </button>
@@ -500,11 +551,14 @@ export function LocationsSettingsPage() {
               zoom={mapZoom}
               style={{ width: "100%", height: "100%", zIndex: 0 }}
               zoomControl={true}
+              maxZoom={22}
             >
               <MapUpdater center={mapCenter} zoom={mapZoom} />
               <TileLayer
                 url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                 attribution='&copy; <a href="https://maps.google.com/">Google Maps</a>'
+                maxNativeZoom={20}
+                maxZoom={22}
               />
 
               {/* Selected search result pin */}

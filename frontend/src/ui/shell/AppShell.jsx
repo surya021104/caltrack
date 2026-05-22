@@ -165,9 +165,9 @@ export function AppShell() {
   const items = useMemo(() => {
     if (!user) return []
     const isAdminUser = user.role === "admin" || user.role === "manager"
-    // Employees only see shared nav; admins see shared + admin items (admin items interleaved naturally)
+    // Employees only see shared nav; admins see shared + admin items (Get Started first, then Dashboard, then others)
     return isAdminUser
-      ? [...NAV_SHARED.slice(0, 1), ...NAV_ADMIN, ...NAV_SHARED.slice(1)] // dashboard first, then admin, then shared rest
+      ? [NAV_ADMIN[0], NAV_SHARED[0], ...NAV_ADMIN.slice(1), ...NAV_SHARED.slice(1)]
       : NAV_SHARED
   }, [user])
 

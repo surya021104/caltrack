@@ -7,6 +7,7 @@ import {
   ShieldAlert, ShieldCheck, ShieldOff, AlertTriangle, Download,
   FileText, Users, Clock, CalendarDays, CheckCircle, XCircle,
   RefreshCw, BadgeAlert, BadgeCheck, FileClock, Send, ScrollText,
+  UserCog, Loader2, ChevronDown, Info,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -867,14 +868,311 @@ function RTIFPSPanel() {
 }
 
 // ---------------------------------------------------------------------------
+// Compliance Overview — health scorecard across all areas
+// ---------------------------------------------------------------------------
+function HealthCard({ title, subtitle, status, detail, children }) {
+  const tone = {
+    ok:   { border: "#059669", bg: "rgba(5,150,105,0.06)",  dot: "#059669", label: "OK"   },
+    warn: { border: "#d97706", bg: "rgba(217,119,6,0.06)",  dot: "#d97706", label: "WARN" },
+    risk: { border: "#dc2626", bg: "rgba(220,38,38,0.06)",  dot: "#dc2626", label: "RISK" },
+    info: { border: "var(--stroke)", bg: "var(--surface)",  dot: "#6366f1", label: "—"   },
+  }[status] || { border: "var(--stroke)", bg: "var(--surface)", dot: "#94a3b8", label: "—" }
+
+  return (
+    <div style={{ border: `1.5px solid ${tone.border}`, borderRadius: 14, padding: 18, background: tone.bg, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "var(--fg)" }}>{title}</div>
+        <span style={{ fontSize: 10, fontWeight: 900, color: tone.dot, background: `${tone.dot}18`, padding: "2px 8px", borderRadius: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {tone.label}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{subtitle}</div>
+      {detail && <div style={{ fontSize: 12, color: "var(--fg)", marginTop: 2 }}>{detail}</div>}
+      {children}
+    </div>
+  )
+}
+
+function ComplianceOverviewPanel({ onNavigate }) {
+  const [otData, setOtData]       = useState(null)
+  const [wageData, setWageData]   = useState(null)
+  const [rtwData, setRtwData]     = useState(null)
+  const [ukData, setUkData]       = useState(null)
+  const [loading, setLoading]     = useState(true)
+
+  useEffect(() => {
+    Promise.allSettled([
+      apiRequest("/compliance/ot-risk/"),
+      apiRequest("/compliance/wage-floor/"),
+      apiRequest("/compliance/rtw/expiry-check/"),
+      apiRequest("/compliance/uk-48hr/"),
+    ]).then(([ot, wage, rtw, uk]) => {
+      if (ot.status   === "fulfilled") setOtData(ot.value?.data || ot.value)
+      if (wage.status === "fulfilled") setWageData(wage.value?.data || wage.value)
+      if (rtw.status  === "fulfilled") setRtwData(rtw.value?.data || rtw.value)
+      if (uk.status   === "fulfilled") setUkData(uk.value?.data || uk.value)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div style={{ display: "flex", justifyContent: "center", padding: 60, color: "var(--muted)" }}>
+      <Loader2 size={24} style={{ animation: "spin .7s linear infinite" }} />
+    </div>
+  )
+
+  const otAlerts    = otData?.alerts?.length || 0
+  const wageViolations = wageData?.violation_count || 0
+  const rtwExpiring = (rtwData?.expiring_within_60_days?.length || 0) + (rtwData?.expired?.length || 0)
+  const ukBreaching = (ukData?.employees || []).filter(e => !e.is_compliant).length
+
+  const cards = [
+    {
+      id: "flsa",
+      title: "FLSA Overtime (US)",
+      subtitle: "Federal 40hr + CA/AK daily OT",
+      status: otAlerts > 0 ? "warn" : "ok",
+      detail: otAlerts > 0 ? `${otAlerts} employee${otAlerts !== 1 ? "s" : ""} flagged this week` : "No overtime risk this week",
+    },
+    {
+      id: "flsa",
+      title: "Minimum Wage Floor (US + UK)",
+      subtitle: "All 50 US states · UK NMW by age band",
+      status: wageViolations > 0 ? "risk" : "ok",
+      detail: wageViolations > 0 ? `${wageViolations} violation${wageViolations !== 1 ? "s" : ""} — employees paid below legal floor` : "All employees above minimum wage",
+    },
+    {
+      id: "rtw",
+      title: "Right to Work (UK)",
+      subtitle: "Passport · BRP · Share Code · EU Settlement",
+      status: rtwExpiring > 0 ? "warn" : "ok",
+      detail: rtwExpiring > 0 ? `${rtwExpiring} document${rtwExpiring !== 1 ? "s" : ""} expiring or expired` : "All RTW documents current",
+    },
+    {
+      id: "uk-wtr",
+      title: "48-Hour Limit (UK WTR)",
+      subtitle: "17-week rolling average · Reg 4 compliance",
+      status: ukBreaching > 0 ? "risk" : "ok",
+      detail: ukBreaching > 0 ? `${ukBreaching} employee${ukBreaching !== 1 ? "s" : ""} breaching 48hr average` : "All employees within WTR limit",
+    },
+    {
+      id: "breaks",
+      title: "Break Compliance",
+      subtitle: "CA · WA · OR · CO · IL + UK 11hr rest rule",
+      status: "info",
+      detail: "Run a date-range report to check meal and rest break violations",
+    },
+    {
+      id: "uk-wtr",
+      title: "Holiday Accrual (UK WTR)",
+      subtitle: "Reg 13 (4wk) + Reg 13A (1.6wk) — 12.07% accrual",
+      status: "info",
+      detail: "Track holiday pots and carry-over for all UK employees",
+    },
+    {
+      id: "flsa",
+      title: "FLSA Exempt Classification",
+      subtitle: "Salary basis $844/wk · Duties test categories",
+      status: "info",
+      detail: "Review and update exempt / non-exempt status per employee",
+    },
+    {
+      id: "paye",
+      title: "PAYE / RTI (UK HMRC)",
+      subtitle: "Full Payment Submission · Income tax · NI categories",
+      status: "info",
+      detail: "Generate FPS data for payroll periods — ready for HMRC gateway",
+    },
+    {
+      id: "audit",
+      title: "Immutable Audit Trail",
+      subtitle: "3-year DOL/WTR retention · SOC 2 ready",
+      status: "ok",
+      detail: "Every time log edit and deletion is permanently recorded with before/after state",
+    },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20, padding: "14px 18px", background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <Info size={16} style={{ color: "#6366f1", flexShrink: 0, marginTop: 2 }} />
+        <div style={{ fontSize: 12, color: "var(--fg)", lineHeight: 1.6 }}>
+          <strong>Compliance at a glance.</strong> Use the tabs above to drill into each area. Items marked <span style={{ color: "#dc2626", fontWeight: 700 }}>RISK</span> require immediate attention. <span style={{ color: "#d97706", fontWeight: 700 }}>WARN</span> items should be reviewed this week.
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+        {cards.map((c, i) => (
+          <HealthCard key={i} title={c.title} subtitle={c.subtitle} status={c.status} detail={c.detail}>
+            {c.id && (
+              <button
+                onClick={() => onNavigate(c.id)}
+                style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline", textAlign: "left" }}
+              >
+                View details →
+              </button>
+            )}
+          </HealthCard>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// FLSA Exempt Status Panel
+// ---------------------------------------------------------------------------
+function ExemptStatusPanel() {
+  const [employees, setEmployees] = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [saving, setSaving]       = useState(null)
+  const [result, setResult]       = useState({})
+
+  useEffect(() => {
+    apiRequest("/employees/")
+      .then(r => setEmployees(unwrapResults(r)))
+      .catch(() => setEmployees([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleChange(emp, newStatus) {
+    setSaving(emp.id)
+    setResult(prev => ({ ...prev, [emp.id]: null }))
+    try {
+      const res = await apiRequest(`/compliance/exempt-status/${emp.id}/`, {
+        method: "PATCH",
+        json: { exempt_status: newStatus, reason: "Updated via Compliance Centre" },
+      })
+      setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, exempt_status: newStatus } : e))
+      setResult(prev => ({ ...prev, [emp.id]: { ok: true, msg: res.data?.suggestion || "Saved" } }))
+    } catch (err) {
+      setResult(prev => ({ ...prev, [emp.id]: { ok: false, msg: err?.body?.message || "Failed" } }))
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const STATUS_OPTS = [
+    { value: "non_exempt",       label: "Non-Exempt (OT required)" },
+    { value: "exempt_executive", label: "Exempt — Executive" },
+    { value: "exempt_admin",     label: "Exempt — Administrative" },
+    { value: "exempt_professional", label: "Exempt — Professional" },
+    { value: "exempt_computer",  label: "Exempt — Computer Employee" },
+    { value: "exempt_outside_sales", label: "Exempt — Outside Sales" },
+    { value: "exempt_highly_compensated", label: "Exempt — Highly Compensated (HCE)" },
+  ]
+
+  const STATUS_COLOR = {
+    non_exempt: "#059669",
+    exempt_executive: "#6366f1",
+    exempt_admin: "#6366f1",
+    exempt_professional: "#6366f1",
+    exempt_computer: "#6366f1",
+    exempt_outside_sales: "#6366f1",
+    exempt_highly_compensated: "#6366f1",
+  }
+
+  return (
+    <Card title="">
+      <SectionHeader
+        icon={<UserCog size={18} color="#6366f1" />}
+        title="FLSA Exempt Classification"
+        sub="Salary basis test $844/wk · Duties test — updated 2024. Misclassification = back wages + penalties"
+      />
+
+      <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 10, fontSize: 12, color: "#991b1b", lineHeight: 1.6 }}>
+        <strong>Legal note:</strong> Exempt status requires both (1) salary ≥ $844/week AND (2) passing the applicable duties test. Meeting the salary threshold alone does not establish exemption.
+      </div>
+
+      {loading ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: 40, color: "var(--muted)" }}>
+          <Loader2 size={20} style={{ animation: "spin .7s linear infinite" }} />
+        </div>
+      ) : employees.length === 0 ? (
+        <div className="muted">No employees found.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid var(--stroke)", fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                <th style={{ padding: "8px 12px", textAlign: "left" }}>Employee</th>
+                <th style={{ padding: "8px 12px", textAlign: "left" }}>Role</th>
+                <th style={{ padding: "8px 12px", textAlign: "right" }}>Hourly Rate</th>
+                <th style={{ padding: "8px 12px", textAlign: "left", minWidth: 240 }}>FLSA Status</th>
+                <th style={{ padding: "8px 12px", textAlign: "left" }}>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map(emp => {
+                const currentStatus = emp.exempt_status || "non_exempt"
+                const isSaving = saving === emp.id
+                const res = result[emp.id]
+                const isExempt = currentStatus !== "non_exempt"
+                return (
+                  <tr key={emp.id} style={{ borderBottom: "1px solid var(--stroke2)" }}>
+                    <td style={{ padding: "10px 12px", fontWeight: 700, color: "var(--fg)" }}>
+                      {emp.name || emp.user?.username || emp.employee_id}
+                    </td>
+                    <td style={{ padding: "10px 12px", color: "var(--muted)", fontSize: 12 }}>
+                      {emp.title || emp.role || "—"}
+                    </td>
+                    <td style={{ padding: "10px 12px", textAlign: "right", fontFamily: "monospace", fontSize: 12 }}>
+                      ${parseFloat(emp.hourly_rate || 0).toFixed(2)}/hr
+                    </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ position: "relative", flex: 1 }}>
+                          <select
+                            value={currentStatus}
+                            disabled={isSaving}
+                            onChange={e => handleChange(emp, e.target.value)}
+                            style={{
+                              width: "100%", padding: "6px 28px 6px 10px", borderRadius: 8,
+                              border: `1.5px solid ${isExempt ? "#6366f1" : "#059669"}`,
+                              background: "var(--surface)", color: "var(--fg)", fontSize: 12,
+                              fontWeight: 700, appearance: "none", cursor: "pointer",
+                            }}
+                          >
+                            {STATUS_OPTS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown size={12} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--muted)" }} />
+                        </div>
+                        {isSaving && <Loader2 size={14} style={{ animation: "spin .7s linear infinite", color: "var(--muted)", flexShrink: 0 }} />}
+                      </div>
+                    </td>
+                    <td style={{ padding: "10px 12px", fontSize: 11 }}>
+                      {res ? (
+                        <span style={{ color: res.ok ? "#059669" : "#dc2626", fontWeight: 700 }}>
+                          {res.msg}
+                        </span>
+                      ) : (
+                        <span style={{ color: isExempt ? "#6366f1" : "#059669", fontWeight: 700, fontSize: 10, textTransform: "uppercase" }}>
+                          {isExempt ? "Exempt" : "Non-Exempt"}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main CompliancePage
 // ---------------------------------------------------------------------------
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "rtw", label: "Right to Work" },
-  { id: "holiday", label: "Holiday Accrual" },
-  { id: "audit", label: "Audit Trail" },
-  { id: "rti", label: "RTI / FPS" },
+  { id: "flsa",     label: "FLSA & OT" },
+  { id: "breaks",   label: "Break Compliance" },
+  { id: "uk-wtr",   label: "UK · WTR" },
+  { id: "rtw",      label: "Right to Work" },
+  { id: "paye",     label: "PAYE / RTI" },
+  { id: "audit",    label: "Audit Trail" },
 ]
 
 export function CompliancePage() {
@@ -954,32 +1252,38 @@ export function CompliancePage() {
         ))}
       </div>
 
-      {/* Overview tab */}
-      {tab === "overview" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          <OTRiskPanel />
-          <UK48HrPanel />
-          <WageFloorPanel />
-          <BreakCompliancePanel />
-        </div>
-      )}
+      {/* Overview tab — health scorecard */}
+      {tab === "overview" && <ComplianceOverviewPanel onNavigate={setTab} />}
 
-      {/* RTW tab */}
-      {tab === "rtw" && (
+      {/* FLSA & OT tab */}
+      {tab === "flsa" && (
         <div style={{ display: "grid", gap: 20 }}>
-          <RTWPanel />
-          <WTROptOutPanel />
+          <OTRiskPanel />
+          <ExemptStatusPanel />
+          <WageFloorPanel />
         </div>
       )}
 
-      {/* Holiday tab */}
-      {tab === "holiday" && <HolidayAccrualPanel />}
+      {/* Break Compliance tab */}
+      {tab === "breaks" && <BreakCompliancePanel />}
 
-      {/* Audit tab */}
+      {/* UK WTR tab */}
+      {tab === "uk-wtr" && (
+        <div style={{ display: "grid", gap: 20 }}>
+          <UK48HrPanel />
+          <WTROptOutPanel />
+          <HolidayAccrualPanel />
+        </div>
+      )}
+
+      {/* Right to Work tab */}
+      {tab === "rtw" && <RTWPanel />}
+
+      {/* PAYE / RTI tab */}
+      {tab === "paye" && <RTIFPSPanel />}
+
+      {/* Audit Trail tab */}
       {tab === "audit" && <AuditTrailPanel />}
-
-      {/* RTI tab */}
-      {tab === "rti" && <RTIFPSPanel />}
       </div>
     </div>
   )

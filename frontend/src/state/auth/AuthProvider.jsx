@@ -31,21 +31,24 @@ export function AuthProvider({ children }) {
     const me = await apiFetchMe()
 
     if (me?.username && me?.role && me?.company) {
-      setUser({
+      const u = {
         username:  me.username,
         email:     me.email      ?? "",
         firstName: me.first_name ?? "",
         lastName:  me.last_name  ?? "",
         role:      me.role,
         companyId: me.company,
-      })
+      }
+      setUser(u)
       if (me.company_name) {
         localStorage.setItem("quicktims.orgName", me.company_name)
         window.dispatchEvent(new CustomEvent("quicktims:orgName"))
       }
+      return u
     } else {
       // Not authenticated (cookies missing, expired, or server rejected them)
       setUser(null)
+      return null
     }
   }, [])
 
@@ -53,7 +56,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (identifier, password) => {
       await apiLogin(identifier, password)   // server sets cookies
-      await refreshMe()                      // fetch user from /auth/me/
+      return await refreshMe()                      // fetch user from /auth/me/
     },
     [refreshMe]
   )
@@ -62,7 +65,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(
     async (payload) => {
       await apiRegister(payload)   // server sets cookies
-      await refreshMe()
+      return await refreshMe()
     },
     [refreshMe]
   )
@@ -71,7 +74,7 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = useCallback(
     async (googleAccessToken) => {
       await apiGoogleLogin(googleAccessToken)   // server sets cookies
-      await refreshMe()
+      return await refreshMe()
     },
     [refreshMe]
   )

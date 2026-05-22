@@ -152,14 +152,18 @@ export function LoginPage() {
   const [agreedUpdates, setAgreedUpdates] = useState(true)
   const [agreedTerms, setAgreedTerms] = useState(false)
 
-  const postLoginRoute = () => routes.DASHBOARD
+  const postLoginRoute = (usr) => {
+    const role = usr?.role
+    const isAdmin = role === "admin" || role === "manager"
+    return isAdmin ? routes.get_started : routes.dashboard
+  }
 
   const googleLoginHandler = useGoogleLogin({
     onSuccess: async (tr) => {
       setLoading(true)
       try { 
-        await loginWithGoogle(tr.access_token)
-        navigate(postLoginRoute(), { replace: true }) 
+        const u = await loginWithGoogle(tr.access_token)
+        navigate(postLoginRoute(u), { replace: true }) 
       }
       catch (err) { setError(extractAuthError(err, "Google login failed.")) }
       finally { setLoading(false) }
@@ -175,7 +179,10 @@ export function LoginPage() {
       const ve = validateLoginForm({ identifier: username, password })
       if (ve) return setError(ve)
       setLoading(true)
-      try { await login(username.trim(), password); navigate(postLoginRoute(), { replace: true }) }
+      try { 
+        const u = await login(username.trim(), password)
+        navigate(postLoginRoute(u), { replace: true }) 
+      }
       catch (err) { setError(extractAuthError(err, "Login failed.")) }
       finally { setLoading(false) }
     } else if (mode === "forgot_password") {
@@ -191,8 +198,8 @@ export function LoginPage() {
       setLoading(true)
       try {
         const [first, ...rest] = fullName.trim().split(" ")
-        await register({ username: username.trim(), password, email: email.trim(), first_name: first || "", last_name: rest.join(" ") || "", organization_name: orgName.trim() })
-        navigate(postLoginRoute(), { replace: true })
+        const u = await register({ username: username.trim(), password, email: email.trim(), first_name: first || "", last_name: rest.join(" ") || "", organization_name: orgName.trim() })
+        navigate(postLoginRoute(u), { replace: true })
       } catch (err) { setError(extractAuthError(err, "Registration failed.")) }
       finally { setLoading(false) }
     }

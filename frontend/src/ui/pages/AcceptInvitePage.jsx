@@ -57,8 +57,10 @@ export function AcceptInvitePage() {
     setLoading(true)
     setError(null)
     try {
-      await loginWithGoogle(tr.access_token)
-      navigate(routes.DASHBOARD)
+      const u = await loginWithGoogle(tr.access_token)
+      const role = u?.role
+      const isAdmin = role === "admin" || role === "manager"
+      navigate(isAdmin ? routes.get_started : routes.dashboard)
     } catch (err) {
       setError(err?.body?.detail || "Google authentication failed.")
       setLoading(false)
@@ -85,8 +87,10 @@ export function AcceptInvitePage() {
       })
       
       setTokens({ access: res.access, refresh: res.refresh })
-      await refreshMe()
-      navigate(routes.DASHBOARD)
+      const u = await refreshMe()
+      const role = u?.role
+      const isAdmin = role === "admin" || role === "manager"
+      navigate(isAdmin ? routes.get_started : routes.dashboard)
     } catch (err) {
       setError(err?.body?.detail || err?.body?.message || "Failed to join team.")
       setLoading(false)

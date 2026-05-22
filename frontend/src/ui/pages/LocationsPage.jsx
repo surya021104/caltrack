@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMap } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, useMap, useMapEvents } from "react-leaflet"
 import { Search, MapPin, X, ChevronDown, Info, Archive, Layers, UserCheck, Map, Activity, Loader2, Plus, Globe, Navigation2, Target, Save, Building2 } from "lucide-react"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 
 import { apiRequest, unwrapResults } from "../../api/client.js"
+import { getAddress } from "../../api/geocoding"
 import { Pill, Button, Card, Input, Select, TextArea } from "../components/kit.jsx"
 import { ZonesPanel } from "./locations/ZonesPanel.jsx"
 import { AssignmentsPanel } from "./locations/AssignmentsPanel.jsx"
@@ -96,6 +97,7 @@ export function LocationsPage() {
 
   /* ── Selected place ────────────────────────────────────────── */
   const [selectedPlace, setSelectedPlace] = useState(null)
+  const [manualPin, setManualPin] = useState(null)
 
   /* ── Add Location panel ────────────────────────────────────── */
   const [showAddPanel, setShowAddPanel] = useState(false)
@@ -107,6 +109,10 @@ export function LocationsPage() {
   })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
+
+  /* ── Map state ─────────────────────────────────────────────── */
+  const [mapCenter, setMapCenter] = useState([0, 0])
+  const [mapZoom, setMapZoom] = useState(2)
 
   /* ── Saved locations from DB ───────────────────────────────── */
   const [savedLocations, setSavedLocations] = useState([])
@@ -127,10 +133,44 @@ export function LocationsPage() {
   /* ── Active tab ────────────────────────────────────────────── */
   const [activeTab, setActiveTab] = useState("map") // "map" | "zones" | "assignments"
 
-  /* ── Map state ─────────────────────────────────────────────── */
-  const defaultCenter = [12.9716, 80.0414]
-  const [mapCenter, setMapCenter] = useState(defaultCenter)
-  const [mapZoom, setMapZoom] = useState(5)
+  function MapClickHandler() {
+    useMapEvents({
+      click(e) {
+        setManualPin({ lat: e.latlng.lat, lng: e.latlng.lng })
+        setSelectedPlace(null)
+      },
+    })
+    return null
+  }
+
+  /* ── User Geolocation ──────────────────────────────────────── */
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude
+          const lng = position.coords.longitude
+          setMapCenter([lat, lng])
+          setMapZoom(16) // Zoom in closer once we have accurate location
+          
+          // Reverse geocode to show as text
+          const address = await getAddress(lat, lng)
+          if (address) {
+            setSearchQuery(address)
+          }
+        },
+        (error) => {
+          console.warn("Could not get user location:", error)
+          setMapCenter([0, 0])
+          setMapZoom(2)
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    } else {
+      setMapCenter([0, 0])
+      setMapZoom(2)
+    }
+  }, [])
 
   /* ── Radius ────────────────────────────────────────────────── */
   const [customRadius, setCustomRadius] = useState(false)
@@ -189,7 +229,6 @@ export function LocationsPage() {
     try {
       const res = await apiRequest("/time/locations/")
       const all = unwrapResults(res) || []
-      // Split into active and archived if the field exists, otherwise assume all are active
       setSavedLocations(all.filter(l => !l.is_archived))
       setArchivedLocations(all.filter(l => l.is_archived))
     } catch {
@@ -245,14 +284,12 @@ export function LocationsPage() {
 
   useEffect(() => {
     if (!GOOGLE_API_KEY) return
-    // If already loaded
     if (window.google?.maps?.places) {
       autocompleteService.current = new window.google.maps.places.AutocompleteService()
       if (!dummyDiv.current) dummyDiv.current = document.createElement("div")
       placesService.current = new window.google.maps.places.PlacesService(dummyDiv.current)
       return
     }
-    // Load script
     const script = document.createElement("script")
     script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places&language=en`
     script.async = true
@@ -263,9 +300,7 @@ export function LocationsPage() {
       placesService.current = new window.google.maps.places.PlacesService(dummyDiv.current)
     }
     document.head.appendChild(script)
-    return () => {
-      // Don't remove — other components might need it
-    }
+    return () => {}
   }, [GOOGLE_API_KEY])
 
   /* ── Google Places Autocomplete search (debounced) ─────────── */
@@ -277,74 +312,81 @@ export function LocationsPage() {
       return
     }
 
-    /* ── If Google Places is available, use it ─────────────────── */
-    if (autocompleteService.current) {
+    const runNominatimFallback = () => {
+      let cancelled = false
       setSearching(true)
-      autocompleteService.current.getPlacePredictions(
-        {
-          input: debouncedQuery,
-          types: [],  // all types — worldwide precise results
-        },
-        (predictions, status) => {
+      fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+          debouncedQuery
+        )}&format=json&limit=8&addressdetails=1`,
+        { headers: { "Accept-Language": "en" } }
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return
           setSearching(false)
-          if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
-            setSearchResults([])
-            return
-          }
           setSearchResults(
-            predictions.map((p) => ({
-              id: p.place_id,
-              placeId: p.place_id,
-              name: p.structured_formatting?.main_text || p.description.split(",")[0],
-              secondaryText: p.structured_formatting?.secondary_text || p.description.split(",").slice(1).join(",").trim(),
-              fullAddress: p.description,
-              // lat/lng not yet available — fetched on selection via getDetails
-              lat: null,
-              lng: null,
-              types: p.types,
+            data.map((d) => ({
+              id: d.place_id,
+              name: d.name || d.display_name.split(",")[0],
+              fullAddress: d.display_name,
+              lat: parseFloat(d.lat),
+              lng: parseFloat(d.lon),
             }))
           )
           setShowDropdown(true)
-        }
-      )
+        })
+        .catch((err) => {
+          if (cancelled) return
+          console.error("Nominatim search error:", err)
+          setSearching(false)
+          setSearchResults([])
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (autocompleteService.current) {
+      setSearching(true)
+      try {
+        autocompleteService.current.getPlacePredictions(
+          {
+            input: debouncedQuery,
+            location: mapCenter && mapCenter[0] !== 0 ? new window.google.maps.LatLng(mapCenter[0], mapCenter[1]) : undefined,
+            radius: 50000,
+          },
+          (predictions, status) => {
+            if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions) {
+              console.warn("Google Places failed (Status:", status, ") — Using Nominatim fallback")
+              runNominatimFallback()
+              return
+            }
+            setSearching(false)
+            setSearchResults(
+              predictions.map((p) => ({
+                id: p.place_id,
+                placeId: p.place_id,
+                name: p.structured_formatting?.main_text || p.description.split(",")[0],
+                secondaryText: p.structured_formatting?.secondary_text || p.description.split(",").slice(1).join(",").trim(),
+                fullAddress: p.description,
+                lat: null,
+                lng: null,
+                types: p.types,
+              }))
+            )
+            setShowDropdown(true)
+          }
+        )
+      } catch (err) {
+        console.error("Autocomplete error:", err)
+        runNominatimFallback()
+      }
       return
     }
 
-    /* ── Fallback: Nominatim if no Google key ──────────────────── */
-    let cancelled = false
-    setSearching(true)
-    fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-        debouncedQuery
-      )}&format=json&limit=8&addressdetails=1`,
-      { headers: { "Accept-Language": "en" } }
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return
-        setSearchResults(
-          data.map((d) => ({
-            id: d.place_id,
-            placeId: null,
-            name: d.display_name.split(",")[0],
-            secondaryText: d.display_name.split(",").slice(1).join(",").trim(),
-            fullAddress: d.display_name,
-            lat: parseFloat(d.lat),
-            lng: parseFloat(d.lon),
-            type: d.type,
-          }))
-        )
-        setShowDropdown(true)
-      })
-      .catch(() => { })
-      .finally(() => {
-        if (!cancelled) setSearching(false)
-      })
-    return () => { cancelled = true }
   }, [debouncedQuery])
 
-
-  /* ── Close dropdowns on outside click ───────────────────────── */
   useEffect(() => {
     const handler = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
@@ -358,54 +400,68 @@ export function LocationsPage() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  /* ── Select a search result ────────────────────────────────── */
   const handleSelectPlace = (place) => {
-    setSearchQuery(place.name)
+    setSearchQuery(place.fullAddress || place.name)
     setShowDropdown(false)
     setShowAddPanel(false)
+    setManualPin(null)
 
-    /* Google prediction — needs getDetails() for lat/lng */
     if (place.placeId && placesService.current) {
       placesService.current.getDetails(
         {
           placeId: place.placeId,
-          fields: ["geometry", "formatted_address", "name"],
+          fields: ["geometry", "formatted_address", "name", "address_components"],
         },
         (result, status) => {
           if (status === window.google.maps.places.PlacesServiceStatus.OK && result?.geometry?.location) {
             const lat = result.geometry.location.lat()
             const lng = result.geometry.location.lng()
+            const resolvedAddress = result.formatted_address || place.fullAddress
             const resolved = {
               ...place,
               lat,
               lng,
-              fullAddress: result.formatted_address || place.fullAddress,
+              fullAddress: resolvedAddress,
               name: result.name || place.name,
             }
             setSelectedPlace(resolved)
+            setSearchQuery(resolvedAddress)
             setMapCenter([lat, lng])
-            setMapZoom(16)
+            setMapZoom(17)
           }
         }
       )
       return
     }
 
-    /* Nominatim result — already has lat/lng */
     if (place.lat && place.lng) {
       setSelectedPlace(place)
       setMapCenter([place.lat, place.lng])
-      setMapZoom(15)
+      setMapZoom(16)
     }
   }
 
-  /* ── Open add panel ────────────────────────────────────────── */
-  const handleOpenAddPanel = () => {
-    if (!selectedPlace) return
+  const handleAddManualPin = () => {
+    if (!manualPin) return;
     setFormData({
-      name: selectedPlace.name,
-      coordinates: `${selectedPlace.lat},${selectedPlace.lng}`,
-      address: selectedPlace.fullAddress,
+      name: "",
+      coordinates: `${manualPin.lat},${manualPin.lng}`,
+      address: "",
+      radius: 300,
+    });
+    setSaveError("");
+    setCustomRadius(false);
+    setCustomRadiusValue("");
+    setShowAddPanel(true);
+  };
+
+  const handleManualAdd = () => {
+    setShowDropdown(false)
+    setSelectedPlace(null)
+    setFormData({
+      name: searchQuery || "",
+      coordinates: "",
+      address: "",
       radius: 300,
     })
     setSaveError("")
@@ -414,7 +470,6 @@ export function LocationsPage() {
     setShowAddPanel(true)
   }
 
-  /* ── Save location to DB ───────────────────────────────────── */
   const handleSave = async () => {
     if (!formData.name.trim()) {
       setSaveError("Location name is required.")
@@ -445,7 +500,6 @@ export function LocationsPage() {
     }
   }
 
-  /* ── Delete ────────────────────────────────────────────────── */
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this saved location?")) return
     try {
@@ -456,11 +510,8 @@ export function LocationsPage() {
     }
   }
 
-  /* ─────────────────────────── RENDER ─────────────────────────── */
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] bg-bg dark:bg-bg border border-stroke dark:border-slate-800 rounded-[2.5rem] overflow-hidden shadow-sm">
-
-      {/* ── Tab Bar ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-8 py-4 bg-surface dark:bg-slate-900/60 border-b border-stroke dark:border-slate-800 flex-shrink-0">
         <div className="flex items-center gap-2 bg-bg dark:bg-slate-950/40 p-1.5 rounded-2xl border border-stroke dark:border-slate-800">
           {[
@@ -490,7 +541,6 @@ export function LocationsPage() {
         </div>
       </div>
 
-      {/* ── Tab Content ──────────────────────────────────── */}
       {activeTab === "overview" && (
         <div className="flex-1 overflow-hidden animate-in fade-in duration-500">
           <MapOverview />
@@ -511,11 +561,7 @@ export function LocationsPage() {
 
       {activeTab === "map" && (
         <div className="flex flex-1 overflow-hidden animate-in fade-in duration-500">
-
-          {/* LEFT: search + map stacked in a column */}
           <div className="flex-1 flex flex-col relative min-w-0">
-
-            {/* ── Floating Search Bar ──────────────────────────────────── */}
             <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] flex gap-4 items-center w-full max-w-3xl px-4 animate-in slide-in-from-top-4 duration-500">
               <div ref={searchRef} className="relative flex-1">
                 <div className="relative shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] rounded-[1.5rem]">
@@ -549,7 +595,6 @@ export function LocationsPage() {
                   )}
                 </div>
 
-                {/* ── Search Dropdown ─────────────────────────────── */}
                 {showDropdown && searchResults.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-3 bg-surface dark:bg-slate-900 rounded-[1.5rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] border border-stroke dark:border-slate-800 z-[9999] overflow-hidden max-h-[28rem] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-300">
                     {searchResults.map((r) => (
@@ -563,8 +608,8 @@ export function LocationsPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="text-base font-black text-slate-900 dark:text-white mb-0.5">{r.name}</div>
-                          <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest truncate">
-                            {r.secondaryText || r.fullAddress.split(",").slice(1).join(",").trim()}
+                          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate" style={{ maxWidth: '420px' }}>
+                            {r.fullAddress}
                           </div>
                         </div>
                       </button>
@@ -581,7 +626,6 @@ export function LocationsPage() {
                 )}
               </div>
 
-              {/* Radius filter dropdown */}
               <div ref={radiusRef} className="relative">
                 <button
                   onClick={() => setShowRadiusDropdown(!showRadiusDropdown)}
@@ -621,7 +665,6 @@ export function LocationsPage() {
                 )}
               </div>
 
-              {/* Map / List toggle */}
               <div className="flex bg-surface dark:bg-slate-900 rounded-[1.5rem] border border-stroke dark:border-slate-800 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] overflow-hidden">
                 <button
                   onClick={() => setViewMode("map")}
@@ -638,7 +681,6 @@ export function LocationsPage() {
               </div>
             </div>
 
-            {/* ── Map View ───────────────────────────────────────── */}
             {viewMode === "map" ? (
               <div className="absolute inset-0 z-0">
                 <MapContainer
@@ -646,11 +688,29 @@ export function LocationsPage() {
                   zoom={mapZoom}
                   className="w-full h-full"
                   zoomControl={false}
+                  maxZoom={22}
                 >
                   <MapUpdater center={mapCenter} zoom={mapZoom} />
+                  <MapClickHandler />
+                  {manualPin && (
+                    <Marker position={[manualPin.lat, manualPin.lng]} icon={createOrangePin()}>
+                      <Popup maxWidth={300} minWidth={260} autoPan>
+                        <div className="p-4 text-center">
+                          <div className="text-lg font-black text-slate-900 tracking-tight mb-1">
+                            New Pin Location
+                          </div>
+                          <Button onClick={handleAddManualPin} className="w-full shadow-lg shadow-indigo-100 rounded-xl py-3">
+                            Add New Location
+                          </Button>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )}
                   <TileLayer
                     url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                     attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                    maxNativeZoom={20}
+                    maxZoom={22}
                   />
 
                   {/* Selected search result: orange pin with popup */}

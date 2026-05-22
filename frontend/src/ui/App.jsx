@@ -56,6 +56,10 @@ const SettingsPage = lazy(() =>
   import("./pages/SettingsPage.jsx").then(m => ({ default: m.SettingsPage }))
 )
 
+const OnboardingPage = lazy(() =>
+  import("./pages/OnboardingPage.jsx").then(m => ({ default: m.OnboardingPage }))
+)
+
 const GetStartedPage = lazy(() =>
   import("./pages/GetStartedPage.jsx").then(m => ({ default: m.GetStartedPage }))
 )
@@ -113,6 +117,7 @@ function RequireAdminSettings() {
 
 export function App() {
   const { isReady, user } = useAuth()
+  const { isAdmin } = useRole()
 
   const PageLoader = () => (
     <div className="flex items-center justify-center min-h-[400px] w-full">
@@ -155,7 +160,7 @@ export function App() {
             element={
               user ? (
                 user.companyId ? (
-                  <Navigate to={routes.dashboard} replace />
+                  <Navigate to={isAdmin ? routes.get_started : routes.dashboard} replace />
                 ) : (
                   <Navigate to={routes.onboarding} replace />
                 )
@@ -167,13 +172,21 @@ export function App() {
 
           <Route
             path={routes.onboarding}
-            element={<Navigate to={routes.login} replace />}
+            element={
+              !user ? (
+                <Navigate to={routes.login} replace />
+              ) : user.companyId ? (
+                <Navigate to={isAdmin ? routes.get_started : routes.dashboard} replace />
+              ) : (
+                <OnboardingPage />
+              )
+            }
           />
           
           <Route
             path={routes.reset_password}
             element={
-              user ? <Navigate to={routes.dashboard} replace /> : <ResetPasswordPage />
+              user ? <Navigate to={isAdmin ? routes.get_started : routes.dashboard} replace /> : <ResetPasswordPage />
             }
           />
 
@@ -181,7 +194,7 @@ export function App() {
             path={routes.accept_invite}
             element={
               user ? (
-                <Navigate to={routes.dashboard} replace />
+                <Navigate to={isAdmin ? routes.get_started : routes.dashboard} replace />
               ) : (
                 <AcceptInvitePage />
               )
