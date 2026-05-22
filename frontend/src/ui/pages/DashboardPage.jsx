@@ -350,12 +350,16 @@ function ChartPlaceholder() {
 }
 
 export function DashboardPage() {
+  const { isAdmin } = useRole()
+  if (!isAdmin) return <EmployeeDashboard />
+  return <AdminDashboard />
+}
+
+function AdminDashboard() {
   const { user } = useAuth()
   const { isAdmin } = useRole()
   const navigate = useNavigate()
 
-  // Employees get their own personal dashboard — not the admin analytics view
-  if (!isAdmin) return <EmployeeDashboard />
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [analytics, setAnalytics] = useState(null)
