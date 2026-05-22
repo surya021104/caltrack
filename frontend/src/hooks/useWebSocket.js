@@ -1,5 +1,5 @@
 /**
- * useWebSocket — reconnecting WebSocket hook with JWT auth.
+ * useWebSocket — reconnecting WebSocket hook with cookie-based auth.
  *
  * Usage:
  *   const { send, readyState } = useWebSocket("/ws/live/admin/", {
@@ -8,13 +8,13 @@
  *   })
  *
  * The hook:
- *   • Appends ?token=<access_token> automatically
+ *   • Relies on the httpOnly qt_access cookie — browser sends it automatically
+ *     during the WebSocket handshake; no token in the URL needed.
  *   • Reconnects with exponential back-off (1 s → 30 s max)
- *   • Stops reconnecting on auth failure codes (4001, 4003)
+ *   • Stops reconnecting on auth failure codes (4001–4004)
  *   • Exposes send(), readyState (WebSocket.OPEN / CONNECTING / CLOSED)
  */
 import { useCallback, useEffect, useRef, useState } from "react"
-import { getTokens } from "../state/auth/tokens.js"
 
 const WS_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_WS_BASE_URL) ||
@@ -23,10 +23,10 @@ const WS_BASE =
 const FATAL_CODES = new Set([4001, 4002, 4003, 4004])
 
 export function useWebSocket(path, { onMessage, onConnect, onDisconnect } = {}) {
-  const wsRef = useRef(null)
+  const wsRef        = useRef(null)
   const reconnectRef = useRef(null)
-  const attemptsRef = useRef(0)
-  const mountedRef = useRef(true)
+  const attemptsRef  = useRef(0)
+  const mountedRef   = useRef(true)
   const callbacksRef = useRef({ onMessage, onConnect, onDisconnect })
 
   // Keep callbacks fresh without triggering re-connects
@@ -37,16 +37,14 @@ export function useWebSocket(path, { onMessage, onConnect, onDisconnect } = {}) 
   const [readyState, setReadyState] = useState(WebSocket.CONNECTING)
 
   const connect = useCallback(() => {
-    if (!mountedRef.current) return
-
-    const tokens = getTokens()
-    if (!tokens?.access || !path) {
+    if (!mountedRef.current || !path) {
       setReadyState(WebSocket.CLOSED)
       return
     }
 
-    const url = `${WS_BASE}${path}?token=${encodeURIComponent(tokens.access)}`
-    const ws = new WebSocket(url)
+    // Browser automatically includes the httpOnly qt_access cookie in the
+    // WebSocket handshake — no token needs to appear in the URL.
+    const ws = new WebSocket(`${WS_BASE}${path}`)
     wsRef.current = ws
     setReadyState(WebSocket.CONNECTING)
 
@@ -80,7 +78,7 @@ export function useWebSocket(path, { onMessage, onConnect, onDisconnect } = {}) 
     ws.onerror = () => {
       /* handled by onclose */
     }
-  }, [path]) // only path is a dep — callbacks are via ref
+  }, [path])
 
   useEffect(() => {
     mountedRef.current = true

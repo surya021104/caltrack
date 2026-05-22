@@ -1,20 +1,70 @@
 import uuid
+import traceback
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import connection, transaction
+from companies.models import Company
 
 from rest_framework import permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView
 import requests
-from django.contrib.auth import get_user_model
-from django.db import connection
 
 from .serializers import UserSerializer
 from employees.utils import generate_next_employee_id
+
+
+# ── Cookie helper ─────────────────────────────────────────────────────────────
+
+def _set_auth_cookies(response, access_token, refresh_token=None):
+    """
+    Attach httpOnly JWT cookies to *response*.
+
+    Access cookie  — sent to every path (needed for all API calls).
+    Refresh cookie — restricted to /api/auth/refresh/ so it is never
+                     accidentally exposed to other endpoints.
+    """
+    secure   = getattr(settings, "AUTH_COOKIE_SECURE", not settings.DEBUG)
+    samesite = getattr(settings, "AUTH_COOKIE_SAMESITE", "Strict")
+
+    access_max_age  = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+    refresh_max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+
+    response.set_cookie(
+        settings.AUTH_COOKIE,
+        str(access_token),
+        max_age=access_max_age,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
+        path="/",
+    )
+    if refresh_token is not None:
+        response.set_cookie(
+            settings.AUTH_COOKIE_REFRESH,
+            str(refresh_token),
+            max_age=refresh_max_age,
+            httponly=True,
+            secure=secure,
+            samesite=samesite,
+            path="/api/auth/refresh/",   # only sent to the refresh endpoint
+        )
+    return response
+
+
+def _clear_auth_cookies(response):
+    """Remove both auth cookies from the browser."""
+    response.delete_cookie(settings.AUTH_COOKIE, path="/")
+    response.delete_cookie(settings.AUTH_COOKIE_REFRESH, path="/api/auth/refresh/")
+    return response
 import uuid
 import traceback
 from django.db import transaction
 from companies.models import Company
+from settings_hub.models import TeamInvite
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -71,14 +121,56 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-    
+
     def post(self, request, *args, **kwargs):
-        print(f"DEBUG: LoginView - POST request received: {request.data}")
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            access  = response.data.get("access")
+            refresh = response.data.get("refresh")
+            _set_auth_cookies(response, access, refresh)
+            # Strip tokens from the body — they live in httpOnly cookies now
+            response.data = {"success": True, "message": "Login successful."}
+        return response
 
 
-class RefreshView(TokenRefreshView):
-    pass
+class RefreshView(APIView):
+    """
+    Rotate the access token using the httpOnly refresh cookie.
+    No body needed — the browser sends the cookie automatically.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH)
+        if not refresh_token:
+            return Response(
+                {"success": False, "message": "No refresh token — please log in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        try:
+            from rest_framework_simplejwt.tokens import RefreshToken
+            token = RefreshToken(refresh_token)
+            access_token = token.access_token
+            response = Response({"success": True})
+            _set_auth_cookies(response, access_token)   # only rotate access cookie
+            return response
+        except Exception:
+            response = Response(
+                {"success": False, "message": "Session expired. Please log in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            _clear_auth_cookies(response)
+            return response
+
+
+class LogoutView(APIView):
+    """Clear both auth cookies — works whether or not the user is authenticated."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        response = Response({"success": True, "message": "Logged out."})
+        _clear_auth_cookies(response)
+        return response
 
 
 class GoogleLoginView(APIView):
@@ -100,6 +192,11 @@ class GoogleLoginView(APIView):
             
         User = get_user_model()
         user = User.objects.filter(email=email).first()
+        
+        # Check for pending invitations for this email
+        from settings_hub.models import TeamInvite
+        invite = TeamInvite.objects.filter(email__iexact=email, status="pending").first()
+
         if not user:
             username = email.split("@")[0]
             base_username = username
@@ -115,15 +212,53 @@ class GoogleLoginView(APIView):
                 last_name=user_info.get("family_name", ""),
             )
             user.set_unusable_password()
-            user.save()
-            # Note: Employee profile is NOT created here because company is required.
-            # The user will be prompted to create/join a company via the onboarding flow,
-            # and an Employee profile will be created at that point.
             
+            # If they have an invite, link them to the company immediately
+            if invite:
+                user.company = invite.company
+                user.role = invite.role
+                
+            user.save()
+
+        # If user exists but wasn't linked to a company, and now has an invite
+        elif invite and not user.company:
+            user.company = invite.company
+            user.role = invite.role
+            user.save(update_fields=["company", "role"])
+
+        # Handle invitation acceptance logic
+        if invite:
+            with transaction.atomic():
+                invite.status = "accepted"
+                from django.utils import timezone
+                invite.accepted_at = timezone.now()
+                invite.save(update_fields=["status", "accepted_at"])
+
+                # Ensure Employee profile exists in tenant schema
+                if hasattr(connection, 'set_tenant'):
+                    connection.set_tenant(invite.company)
+                
+                from employees.models import Employee
+                Employee.objects.get_or_create(
+                    user=user,
+                    company=invite.company,
+                    defaults={
+                        "employee_id": generate_next_employee_id(invite.company),
+                        "title": invite.role.title(),
+                        "hourly_rate": 0,
+                    }
+                )
+                if hasattr(connection, 'set_schema_to_public'):
+                    connection.set_schema_to_public()
+
         refresh = CustomTokenObtainPairSerializer.get_token(user)
+        response = Response({"success": True, "message": "Google login successful."})
+        _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        return response
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
+            "user": UserSerializer(user).data
         })
 
 
@@ -210,11 +345,12 @@ class RegisterView(APIView):
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         refresh = CustomTokenObtainPairSerializer.get_token(user)
-        return Response({
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": UserSerializer(user).data
-        }, status=status.HTTP_201_CREATED)
+        response = Response(
+            {"success": True, "message": "Registration successful.", "user": UserSerializer(user).data},
+            status=status.HTTP_201_CREATED,
+        )
+        _set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        return response
 
 
 class MeView(APIView):
@@ -332,6 +468,108 @@ class TwoFactorSetupView(APIView):
         request.user.save(update_fields=["two_fa_enabled", "totp_secret"])
         return Response({"success": True, "message": "2FA disabled."})
 
+
+class AcceptInviteView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get("token")
+        password = request.data.get("password")
+        org_schema = request.data.get("org") # Get schema from URL/request
+        first_name = request.data.get("first_name", "")
+        last_name = request.data.get("last_name", "")
+
+        if not token or not password:
+            return Response({"detail": "Token and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Handle multi-tenant lookup
+        if org_schema:
+            if hasattr(connection, 'set_tenant'):
+                from companies.models import Company
+                company = Company.objects.filter(schema_name=org_schema).first()
+                if company:
+                    connection.set_tenant(company)
+        
+        invite = TeamInvite.objects.filter(token=token, status="pending").first()
+        
+        # Fallback: if not found in current schema, search all schemas
+        if not invite:
+            from django_tenants.utils import schema_context
+            from companies.models import Company
+            for company in Company.objects.all():
+                with schema_context(company.schema_name):
+                    invite = TeamInvite.objects.filter(token=token, status="pending").first()
+                    if invite:
+                        # Once found, set the tenant for the rest of the transaction
+                        if hasattr(connection, 'set_tenant'):
+                            connection.set_tenant(company)
+                        break
+
+        if not invite:
+            return Response({"detail": "Invalid or expired invitation token."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if invite.is_expired:
+            invite.status = "expired"
+            invite.save(update_fields=["status"])
+            return Response({"detail": "Invitation has expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        if User.objects.filter(email__iexact=invite.email).exists():
+            return Response({"detail": "User with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                username = invite.email.split("@")[0]
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user = User.objects.create_user(
+                    username=username,
+                    password=password,
+                    email=invite.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=invite.role,
+                )
+                user.company = invite.company
+                user.save()
+
+                invite.status = "accepted"
+                from django.utils import timezone
+                invite.accepted_at = timezone.now()
+                invite.save(update_fields=["status", "accepted_at"])
+
+            if hasattr(connection, 'set_tenant'):
+                connection.set_tenant(invite.company)
+
+            from employees.models import Employee
+            Employee.objects.get_or_create(
+                user=user,
+                company=invite.company,
+                defaults={
+                    "employee_id": generate_next_employee_id(invite.company),
+                    "title": invite.role.title(),
+                    "hourly_rate": 0,
+                }
+            )
+
+            if hasattr(connection, 'set_schema_to_public'):
+                connection.set_schema_to_public()
+
+        except Exception as e:
+            traceback.print_exc()
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        refresh = CustomTokenObtainPairSerializer.get_token(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+            "message": "Login successfully"
+        }, status=status.HTTP_201_CREATED)
 
 class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]

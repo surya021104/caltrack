@@ -8,14 +8,25 @@ from accounts.permissions import is_admin_role
 
 from .models import (
     NotificationPreference, LoginSession, LoginHistory,
-    APIKey, Webhook, TeamInvite,
+    APIKey, Webhook, TeamInvite, Invoice,
 )
 from .serializers import (
     NotificationPreferenceSerializer,
     LoginSessionSerializer, LoginHistorySerializer,
     APIKeySerializer, APIKeyCreateSerializer,
     WebhookSerializer, TeamInviteSerializer, TeamInviteCreateSerializer,
+    InvoiceSerializer,
 )
+
+
+class InvoiceListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_admin(request.user):
+            return Response({"success": False, "message": "Admins only."}, status=403)
+        invoices = Invoice.objects.filter(company=request.user.company)
+        return Response({"success": True, "data": InvoiceSerializer(invoices, many=True).data})
 
 
 def _is_admin(user):
@@ -266,20 +277,66 @@ class TeamInviteListCreateView(APIView):
             email=email,
             role=serializer.validated_data["role"],
         )
-        return Response({"success": True, "data": TeamInviteSerializer(invite).data, "message": f"Invite sent to {email}."}, status=201)
+
+        from django.core.mail import send_mail
+        from django.conf import settings
+        from django.template.loader import render_to_string
+        from django.utils.html import strip_tags
+        
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+        invite_link = f"{frontend_url}/accept-invite?token={invite.token}&org={request.user.company.schema_name}"
+        
+        context = {
+            'company_name': request.user.company.company_name,
+            'inviter_name': request.user.get_full_name() or request.user.username,
+            'role': invite.role,
+            'invite_link': invite_link,
+        }
+        
+        html_message = render_to_string('emails/team_invite.html', context)
+        plain_message = strip_tags(html_message)
+        
+        email_sent = False
+        error_message = None
+        try:
+            send_mail(
+                subject=f"Invitation to join {request.user.company.company_name} on Caltrack",
+                message=plain_message,
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@caltrack.com'),
+                recipient_list=[email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            email_sent = True
+        except Exception as e:
+            print(f"Failed to send email: {e}")
+            error_message = str(e)
+
+        return Response({
+            "success": email_sent,
+            "data": TeamInviteSerializer(invite).data,
+            "message": f"Invite created. Email sent to {email}." if email_sent else f"Invite created, but EMAIL FAILED: {error_message}",
+        }, status=status.HTTP_201_CREATED if email_sent else status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TeamInviteRevokeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, pk):
+        print(f"DEBUG: Revoking invite {pk} for user {request.user}")
         if not _is_admin(request.user):
             return Response({"success": False, "message": "Admins only."}, status=403)
-        invite = TeamInvite.objects.filter(pk=pk, company=request.user.company, status="pending").first()
+        
+        # Allow revoking any invite that hasn't been accepted yet
+        invite = TeamInvite.objects.filter(pk=pk, company=request.user.company).exclude(status="accepted").first()
+        
         if not invite:
+            print(f"DEBUG: Invite {pk} not found for company {request.user.company}")
             return Response({"success": False, "message": "Invite not found."}, status=404)
+            
         invite.status = "revoked"
         invite.save(update_fields=["status"])
+        print(f"DEBUG: Invite {pk} revoked successfully")
         return Response({"success": True, "message": "Invite cancelled."})
 
 

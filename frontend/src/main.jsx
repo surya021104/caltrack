@@ -12,23 +12,17 @@ import "./ui/styles.css"
 
 initTheme()
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "mock-client-id.apps.googleusercontent.com"
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ReduxProvider store={store}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        {googleClientId ? (
-          <GoogleOAuthProvider clientId={googleClientId}>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </GoogleOAuthProvider>
-        ) : (
+        <GoogleOAuthProvider clientId={googleClientId}>
           <AuthProvider>
             <App />
           </AuthProvider>
-        )}
+        </GoogleOAuthProvider>
       </BrowserRouter>
     </ReduxProvider>
   </StrictMode>

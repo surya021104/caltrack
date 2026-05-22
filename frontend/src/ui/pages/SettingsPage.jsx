@@ -7,7 +7,7 @@ import { useAuth } from "../../state/auth/useAuth.js"
 import {
   User, Shield, Palette, Bell, CreditCard, Users2, Plug,
   Building2, Database, AlertTriangle, ShieldCheck, RefreshCcw,
-  CheckCircle2, X, Save, ChevronRight,
+  CheckCircle2, X, Save, ChevronRight, FileText,
 } from "lucide-react"
 
 /* ── Lazy section imports ─────────────────────────────────────── */
@@ -16,7 +16,11 @@ const AccountSecuritySection = lazy(() => import("./settings/AccountSecuritySect
 const AppearanceSection     = lazy(() => import("./settings/AppearanceSection.jsx"))
 const NotificationsSection  = lazy(() => import("./settings/NotificationsSection.jsx"))
 const BillingSection        = lazy(() => import("./settings/BillingSection.jsx"))
+const MembersSettingsSection = lazy(() =>
+  import("./PeopleSettingsPage.jsx").then(m => ({ default: m.PeopleSettingsPage }))
+)
 const TeamMembersSection    = lazy(() => import("./settings/TeamMembersSection.jsx"))
+const InvoicesSection       = lazy(() => import("./settings/InvoicesSection.jsx"))
 const IntegrationsApiSection = lazy(() => import("./settings/IntegrationsApiSection.jsx"))
 const WorkspaceSection      = lazy(() => import("./settings/WorkspaceSection.jsx"))
 const PrivacyDataSection    = lazy(() => import("./settings/PrivacyDataSection.jsx"))
@@ -94,12 +98,28 @@ const TABS = [
     to: routes.settings_billing,
   },
   {
+    id: "people",
+    label: "Members",
+    subtitle: "Add members, manage roles, and view the invite/creation queue.",
+    icon: <Users2 size={15} />,
+    adminOnly: true,
+    to: routes.settings_people,
+  },
+  {
     id: "team",
     label: "Team & Members",
     subtitle: "Invite members, assign roles, and manage workspace access.",
     icon: <Users2 size={15} />,
     adminOnly: true,
     to: routes.settings_team,
+  },
+  {
+    id: "invoices",
+    label: "Invoices",
+    subtitle: "View, generate, and download your past billing invoices.",
+    icon: <FileText size={15} />,
+    adminOnly: true,
+    to: routes.settings_invoices,
   },
   {
     id: "integrations",
@@ -237,7 +257,9 @@ export function SettingsPage({ section: sectionProp }) {
               {activeSection === "appearance"    && <AppearanceSection showToast={showToast} SectionHeader={SectionHeader} />}
               {activeSection === "notifications" && <NotificationsSection showToast={showToast} SectionHeader={SectionHeader} />}
               {activeSection === "billing"       && <BillingSection showToast={showToast} SectionHeader={SectionHeader} />}
+              {activeSection === "people"        && <MembersSettingsSection />}
               {activeSection === "team"          && <TeamMembersSection showToast={showToast} SectionHeader={SectionHeader} />}
+              {activeSection === "invoices"      && <InvoicesSection />}
               {activeSection === "integrations"  && <IntegrationsApiSection showToast={showToast} SectionHeader={SectionHeader} />}
               {activeSection === "organization"  && <WorkspaceSection showToast={showToast} SectionHeader={SectionHeader} />}
               {activeSection === "data"          && <PrivacyDataSection showToast={showToast} SectionHeader={SectionHeader} />}

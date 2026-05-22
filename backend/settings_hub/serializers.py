@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     NotificationPreference, LoginSession, LoginHistory,
-    APIKey, Webhook, TeamInvite,
+    APIKey, Webhook, TeamInvite, Invoice,
 )
 
 
@@ -81,3 +81,9 @@ class TeamInviteSerializer(serializers.ModelSerializer):
 class TeamInviteCreateSerializer(serializers.Serializer):
     email = serializers.EmailField()
     role = serializers.ChoiceField(choices=["admin", "manager", "employee"])
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = "__all__"

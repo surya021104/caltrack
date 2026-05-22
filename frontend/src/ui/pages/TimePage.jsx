@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 
 import { apiRequest, unwrapResults, API_BASE_URL } from "../../api/client.js"
-import { getTokens } from "../../state/auth/tokens.js"
+// tokens.js no longer needed — auth via httpOnly cookies
 import { getAddress } from "../../api/geocoding.js"
 import { formatDateTime, Card, Button, Pill, Input, Select, TextArea } from "../components/kit.jsx"
 import { useAuth } from "../../state/auth/useAuth.js"
@@ -81,13 +81,9 @@ function findOpenBreak(log) {
 
 async function downloadLogPdf(id) {
   try {
-    const tokens = getTokens()
-    const token = tokens?.access
-    if (!token) throw new Error("No authentication")
-
-    // Use absolute URL from API_BASE_URL
+    // credentials: "include" sends the httpOnly auth cookie automatically
     const res = await fetch(`${API_BASE_URL}/time/logs/${id}/download_pdf/`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      credentials: "include",
     });
 
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
@@ -259,13 +255,13 @@ function useWsLocationTracker(isClockedIn) {
 
     const connect = () => {
       if (!mountedRef.current) return
-      const tokens = getTokens()
-      if (!tokens?.access) return
 
+      // Browser sends the httpOnly qt_access cookie automatically with the
+      // WebSocket handshake — no token in the URL needed.
       const WS_BASE =
         (typeof import.meta !== "undefined" && import.meta.env?.VITE_WS_BASE_URL) ||
         "ws://localhost:8000"
-      const ws = new WebSocket(`${WS_BASE}/ws/live/employee/?token=${encodeURIComponent(tokens.access)}`)
+      const ws = new WebSocket(`${WS_BASE}/ws/live/employee/`)
       wsRef.current = ws
 
       ws.onopen = () => sendGpsPing()

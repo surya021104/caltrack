@@ -12,7 +12,7 @@
  *   worked_seconds, time_log_id, clock_in_photo, job_site_name,
  *   clock_in, last_seen (epoch ms), presence (computed by UI timer)
  */
-import { createSlice } from "@reduxjs/toolkit"
+import { createSlice, createSelector } from "@reduxjs/toolkit"
 
 const MAX_BREACHES = 50
 const MAX_SOS = 100
@@ -117,10 +117,17 @@ export default liveLocationSlice.reducer
 
 // ── Selectors ──────────────────────────────────────────────────────────────
 
-export const selectEmployeeList = (state) =>
-  Object.values(state.liveLocation.employees)
+const selectEmployeesObj = (state) => state.liveLocation.employees
+const selectSosAlertsArr = (state) => state.liveLocation.sosAlerts
 
-export const selectActiveSosAlerts = (state) =>
-  state.liveLocation.sosAlerts.filter((s) => s.status === "active")
+export const selectEmployeeList = createSelector(
+  [selectEmployeesObj],
+  (employees) => Object.values(employees)
+)
+
+export const selectActiveSosAlerts = createSelector(
+  [selectSosAlertsArr],
+  (alerts) => alerts.filter((s) => s.status === "active")
+)
 
 export const selectConnected = (state) => state.liveLocation.connected

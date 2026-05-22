@@ -6,7 +6,7 @@ from .views import (
     WebhookListCreateView, WebhookDetailView,
     TeamMembersView, TeamMemberDetailView,
     TeamInviteListCreateView, TeamInviteRevokeView,
-    BillingSubscriptionView,
+    BillingSubscriptionView, InvoiceListView,
     DataExportView, AccountDeletionView, WorkspaceDeletionView, OwnerTransferView,
 )
 
@@ -36,6 +36,7 @@ urlpatterns = [
 
     # Billing
     path("billing/subscription/", BillingSubscriptionView.as_view(), name="billing-subscription"),
+    path("invoices/", InvoiceListView.as_view(), name="invoice-list"),
 
     # Data / Privacy
     path("data/export/", DataExportView.as_view(), name="data-export"),

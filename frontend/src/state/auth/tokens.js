@@ -1,30 +1,14 @@
 /**
  * tokens.js
- * Single source of truth for JWT token persistence.
- * Tokens are stored in localStorage under a namespaced key.
+ *
+ * JWT tokens are now stored as httpOnly cookies set by the server.
+ * JavaScript cannot read or write them — that's the whole point.
+ *
+ * These stubs exist so that any remaining import sites don't break during the
+ * transition, but they are intentional no-ops.  All real token management
+ * happens server-side via Set-Cookie response headers.
  */
 
-const STORAGE_KEY = "quicktims.tokens"
-
-export function getTokens() {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-export function setTokens(tokens) {
-  if (!tokens) {
-    localStorage.removeItem(STORAGE_KEY)
-    return
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens))
-}
-
-/** Alias for setTokens(null) — explicit intent is clearer at call sites. */
-export function clearTokens() {
-  localStorage.removeItem(STORAGE_KEY)
-}
+export function getTokens()      { return null }
+export function setTokens()      { /* server sets cookies */ }
+export function clearTokens()    { /* server clears cookies via /auth/logout/ */ }

@@ -20,13 +20,19 @@ class CompanyMiddleware(MiddlewareMixin):
     def process_request(self, request):
         company = None
 
-        # ── Step 1: Read company_id directly from JWT Bearer token ─────────────
+        # ── Step 1: Read company_id directly from JWT Bearer token or Cookie ────
         # DRF authenticates AFTER middleware, so we decode the token ourselves.
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        token_str = None
         if auth_header.startswith('Bearer '):
+            token_str = auth_header.split(' ')[1]
+        elif 'qt_access' in request.COOKIES:
+            token_str = request.COOKIES['qt_access']
+
+        if token_str:
             try:
                 from rest_framework_simplejwt.tokens import AccessToken
-                token = AccessToken(auth_header.split(' ')[1])
+                token = AccessToken(token_str)
                 company_id = token.get('company_id')
                 if company_id:
                     from companies.models import Company
@@ -47,6 +53,10 @@ class CompanyMiddleware(MiddlewareMixin):
                         company = Company.objects.filter(users=user).first()
                     except Exception:
                         pass
+
+        # ── Step 2.5: Fallback to request.tenant (django-tenants) ───────────────
+        if not company and getattr(request, 'tenant', None):
+            company = request.tenant
 
         # ── Step 3: Switch the DB schema to this company's tenant ───────────────
         if company:

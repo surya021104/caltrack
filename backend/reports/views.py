@@ -62,7 +62,7 @@ class DashboardAnalyticsView(APIView):
     Comprehensive dashboard analytics endpoint.
     Returns aggregated data for charts and KPI cards.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsAdminRole]
 
     def get(self, request):
         company = getattr(request, 'company', None)

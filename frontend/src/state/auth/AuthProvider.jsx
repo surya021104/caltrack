@@ -2,11 +2,10 @@
  * AuthProvider.jsx
  * Central authentication state for the application.
  *
- * Responsibilities:
- *  - Rehydrate auth state on page load (via /auth/me/)
- *  - Expose login / register / loginWithGoogle / logout actions
- *  - Listen for session-expired events dispatched by the API client
- *  - Ensure no stale tokens survive across sessions
+ * Tokens are httpOnly cookies — this file never sees them.
+ * Auth state is derived solely from the /auth/me/ endpoint:
+ *   - If it returns a user   → authenticated
+ *   - If it returns null/401 → not authenticated, redirect to /login
  */
 import { useCallback, useEffect, useMemo, useState } from "react"
 
@@ -15,116 +14,85 @@ import {
   apiFetchMe,
   apiRegister,
   apiGoogleLogin,
+  apiLogout,
   extractAuthError,
 } from "../../api/authService.js"
 import { AuthContext } from "./AuthContext.js"
-import { getJwtCompanyId, getJwtRole, getJwtUsername } from "./jwt.js"
-import { getTokens, setTokens, clearTokens } from "./tokens.js"
 
 export function AuthProvider({ children }) {
   const [isReady, setIsReady] = useState(false)
   const [user, setUser]       = useState(null)
 
-  // ── Rehydrate user from /auth/me/ ─────────────────────────────────────────
+  // ── Rehydrate user state from /auth/me/ ───────────────────────────────────
+  // The browser sends the httpOnly cookie automatically — we just need to
+  // check whether the server accepts it.
 
   const refreshMe = useCallback(async () => {
-    const tokens = getTokens()
-    if (!tokens?.access) {
-      setUser(null)
-      return
-    }
-
     const me = await apiFetchMe()
 
-    if (me?.username && me?.role) {
-      if (!me.company) {
-        // User exists but has no company — force them to re-register/onboard
-        clearTokens()
-        setUser(null)
-        return
-      }
+    if (me?.username && me?.role && me?.company) {
       setUser({
         username:  me.username,
-        email:     me.email    ?? "",
+        email:     me.email      ?? "",
         firstName: me.first_name ?? "",
         lastName:  me.last_name  ?? "",
         role:      me.role,
         companyId: me.company,
       })
-      // Persist org name so AppShell topbar shows it immediately
       if (me.company_name) {
         localStorage.setItem("quicktims.orgName", me.company_name)
         window.dispatchEvent(new CustomEvent("quicktims:orgName"))
       }
-      return
-    }
-
-    // Fallback: parse claims directly from the token (works offline too)
-    const username  = getJwtUsername(tokens.access)
-    const role      = getJwtRole(tokens.access)
-    const companyId = getJwtCompanyId(tokens.access)
-
-    if (username && role && companyId) {
-      setUser({ username, email: "", firstName: "", lastName: "", role, companyId })
     } else {
-      // Token is present but invalid/incomplete — log out cleanly
-      clearTokens()
+      // Not authenticated (cookies missing, expired, or server rejected them)
       setUser(null)
     }
   }, [])
 
   // ── Login ─────────────────────────────────────────────────────────────────
-
   const login = useCallback(
     async (identifier, password) => {
-      const data = await apiLogin(identifier, password)
-      setTokens({ access: data.access, refresh: data.refresh })
-      await refreshMe()
+      await apiLogin(identifier, password)   // server sets cookies
+      await refreshMe()                      // fetch user from /auth/me/
     },
     [refreshMe]
   )
 
   // ── Register ──────────────────────────────────────────────────────────────
-
   const register = useCallback(
     async (payload) => {
-      const data = await apiRegister(payload)
-      setTokens({ access: data.access, refresh: data.refresh })
+      await apiRegister(payload)   // server sets cookies
       await refreshMe()
     },
     [refreshMe]
   )
 
   // ── Google OAuth ──────────────────────────────────────────────────────────
-
   const loginWithGoogle = useCallback(
     async (googleAccessToken) => {
-      const data = await apiGoogleLogin(googleAccessToken)
-      setTokens({ access: data.access, refresh: data.refresh })
+      await apiGoogleLogin(googleAccessToken)   // server sets cookies
       await refreshMe()
     },
     [refreshMe]
   )
 
   // ── Logout ────────────────────────────────────────────────────────────────
-
-  const logout = useCallback(() => {
-    clearTokens()
+  const logout = useCallback(async () => {
+    await apiLogout()                                   // server clears cookies
     localStorage.removeItem("quicktims.orgName")
     setUser(null)
   }, [])
 
   // ── Bootstrap on mount ────────────────────────────────────────────────────
-
   useEffect(() => {
     refreshMe().finally(() => setIsReady(true))
   }, [refreshMe])
 
-  // ── Session expiry event (fired by API client on 401) ─────────────────────
-
+  // ── Session expiry event (fired by API client on unrecoverable 401) ───────
   useEffect(() => {
-    const handle = () => {
-      clearTokens()
+    const handle = async () => {
+      await apiLogout()
+      localStorage.removeItem("quicktims.orgName")
       setUser(null)
     }
     window.addEventListener("quicktims:session-expired", handle)
@@ -132,7 +100,6 @@ export function AuthProvider({ children }) {
   }, [])
 
   // ── Context value ─────────────────────────────────────────────────────────
-
   const value = useMemo(
     () => ({ isReady, user, login, register, loginWithGoogle, logout, refreshMe }),
     [isReady, user, login, register, loginWithGoogle, logout, refreshMe]
