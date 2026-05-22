@@ -141,6 +141,7 @@ function formatDuration(seconds) {
 }
 
 const TaskCard = memo(({ task, onAction, busy }) => {
+  const navigate = useNavigate()
   const [note, setNote] = useState(task.employee_notes || "")
   const [expanded, setExpanded] = useState(false)
   const [declining, setDeclining] = useState(false)
@@ -157,6 +158,10 @@ const TaskCard = memo(({ task, onAction, busy }) => {
     if (e.target.files && e.target.files[0]) {
       setAfterPhoto(e.target.files[0])
     }
+  }
+
+  function handleStartWork() {
+    navigate(`/time?task_id=${task.id}`)
   }
 
   function handleComplete() {
@@ -348,43 +353,55 @@ const TaskCard = memo(({ task, onAction, busy }) => {
         </div>
       )}
 
-      {task.status !== "completed" && task.status !== "cancelled" && !isPending && (
-        <div className="mt-2 pt-4 border-t border-slate-100">
-          {task.status === "pending" && (
-            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl text-[10px] font-black text-indigo-700 dark:text-indigo-400 text-center uppercase tracking-[0.15em]">
-              Please initiate this task via the Attendance module
-            </div>
-          )}
-          {task.status === "in_progress" && (
-            <div className="flex flex-col gap-4">
-              {task.require_before_after_photos && (
-                <div className="p-3 bg-bg dark:bg-slate-950/40 rounded-xl border border-stroke dark:border-slate-800">
-                  <div className="text-[10px] font-black text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5 uppercase tracking-widest">
-                    <Camera size={14} className="text-indigo-600 dark:text-indigo-400" /> After Photo Required
-                  </div>
-                  <input type="file" accept="image/*" onChange={handleAfterPhotoChange} className="text-xs w-full text-slate-500 dark:text-slate-400" />
-                </div>
-              )}
+      <div className="mt-2 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-4">
+        {task.status === "pending" && !isPending && (
+          <Button
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 tracking-widest uppercase text-[11px]"
+            disabled={busy}
+            onClick={handleStartWork}
+          >
+            <Play size={14} /> Start Work
+          </Button>
+        )}
 
-              <TextArea
-                rows={2}
-                placeholder="Optional completion notes..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="min-h-[60px]"
-              />
-              <div className="flex gap-3">
-                <Button variant="ghost" className="flex-1 border border-slate-200" disabled={busy} onClick={() => onAction(task.id, "notes", { employee_notes: note })}>
-                  <Save size={16} className="mr-2" /> Save
-                </Button>
-                <Button className="flex-[1.5] bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-200/50" disabled={busy} onClick={handleComplete}>
-                  <CheckCircle2 size={16} className="mr-2" /> COMPLETE
-                </Button>
+        {task.status === "in_progress" && !isPending && (
+          <div className="flex flex-col gap-4">
+            {task.require_before_after_photos && (
+              <div className="p-3 bg-bg dark:bg-slate-950/40 rounded-xl border border-stroke dark:border-slate-800">
+                <div className="text-[10px] font-black text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1.5 uppercase tracking-widest">
+                  <Camera size={14} className="text-indigo-600 dark:text-indigo-400" /> After Photo Required
+                </div>
+                <input type="file" accept="image/*" onChange={handleAfterPhotoChange} className="text-xs w-full text-slate-500 dark:text-slate-400" />
               </div>
+            )}
+
+            <TextArea
+              rows={2}
+              placeholder="Optional completion notes..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="min-h-[60px]"
+            />
+            <div className="flex gap-3">
+              <Button variant="ghost" className="flex-1 border border-slate-200 bg-bg dark:bg-slate-950/40" disabled={busy} onClick={() => onAction(task.id, "notes", { employee_notes: note })}>
+                <Save size={16} className="mr-2" /> Save Notes
+              </Button>
+              <Button className="flex-[1.5] bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-200/50" disabled={busy} onClick={handleComplete}>
+                <CheckCircle2 size={16} className="mr-2" /> Finish Work
+              </Button>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        {task.status === "completed" && (
+          <Button
+            className="w-full bg-slate-100 dark:bg-slate-800/20 text-slate-400 dark:text-slate-600 font-black py-3 rounded-xl flex items-center justify-center gap-2 cursor-default border border-stroke dark:border-slate-800/80"
+            disabled
+          >
+            <CheckCircle2 size={14} className="text-emerald-500" /> Work Completed
+          </Button>
+        )}
+      </div>
     </div>
   )
 })
@@ -721,7 +738,7 @@ function AssignTaskPanel({ employees, jobSites, availableEmployees, onAssigned, 
           label="Status"
           value={form.status}
           onChange={e => set("status", e.target.value)}
-          options={STATUS_FILTERS.filter(x => x !== "all").map(s => ({ value: s, label: statusLabel(s) }))}
+          options={[{ value: "pending", label: "Pending" }]}
         />
       </div>
 

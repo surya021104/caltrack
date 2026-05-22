@@ -333,12 +333,12 @@ export function AppShell() {
 
           <div className="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
 
-          <div
-            className="relative profileMenuWrap"
-            onMouseEnter={() => setProfileOpen(true)}
-            onMouseLeave={() => setProfileOpen(false)}
-          >
-            <button className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300 group" type="button">
+          <div className="relative profileMenuWrap">
+            <button
+              className="flex items-center gap-3 p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300 group"
+              type="button"
+              onClick={() => setProfileOpen(v => !v)}
+            >
               <div className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600 dark:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform">
                 {initials(user.username)}
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white dark:border-slate-950 rounded-full shadow-sm"></div>
@@ -360,9 +360,11 @@ export function AppShell() {
             </button>
 
             {profileOpen && (
-              <div className="absolute top-full right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-[99999] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="p-6 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60">
-                  <div className="flex items-center gap-4">
+              <>
+                <div className="fixed inset-0 z-[99998]" onClick={() => setProfileOpen(false)} />
+                <div className="absolute top-full right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-[99999] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="p-6 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60">
+                    <div className="flex items-center gap-4">
                     <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 dark:bg-blue-500 text-white text-xl font-bold shadow-xl shadow-blue-500/20">{initials(user.username)}</div>
                     <div>
                       <div className="font-bold text-slate-900 dark:text-white text-lg">{displayName(user.username)}</div>
@@ -385,13 +387,18 @@ export function AppShell() {
                   <button
                     type="button"
                     className="flex items-center w-full px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all duration-300 group"
-                    onClick={() => { setProfileOpen(false); logout(); }}
+                    onClick={async () => {
+                      setProfileOpen(false);
+                      await logout();
+                      navigate("/login", { replace: true });
+                    }}
                   >
                     <LogOut size={18} className="mr-3 group-hover:-translate-x-1 transition-transform" /> Log out
                   </button>
                 </div>
               </div>
-            )}
+            </>
+          )}
           </div>
         </div>
       </header>

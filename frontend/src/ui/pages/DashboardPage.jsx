@@ -110,7 +110,7 @@ function EmployeeDashboard() {
         background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
         padding: "36px 48px 48px",
         position: "relative",
-        overflow: "hidden",
+        overflow: "visible",
       }}>
         <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle at 80% 50%, rgba(255,255,255,0.06) 0%, transparent 60%)", pointerEvents: "none" }} />
         <div style={{ position: "relative", zIndex: 1 }}>
@@ -130,24 +130,49 @@ function EmployeeDashboard() {
           <div
             onClick={() => navigate(routes.tasks)}
             style={{
-              position: "absolute", bottom: -20, right: 48,
-              background: "#fff", borderRadius: 16, padding: "12px 20px",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              position: "absolute", bottom: 16, right: 48,
+              background: "rgba(255, 255, 255, 0.12)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              borderRadius: 16, padding: "12px 20px",
+              boxShadow: "0 10px 32px rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)",
               display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
-              border: "1.5px solid #fde68a",
+              border: "1px solid rgba(255, 255, 255, 0.25)",
               zIndex: 10,
+              transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s, border-color 0.25s, box-shadow 0.25s",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = "translateY(-3px) scale(1.03)"
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.18)"
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.45)"
+              e.currentTarget.style.boxShadow = "0 15px 35px rgba(0, 0, 0, 0.22), 0 0 15px rgba(255, 255, 255, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.3)"
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = "none"
+              e.currentTarget.style.background = "rgba(255, 255, 255, 0.12)"
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.25)"
+              e.currentTarget.style.boxShadow = "0 10px 32px rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)"
             }}
           >
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "#fef9c3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <ClipboardList size={18} style={{ color: "#ca8a04" }} />
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: "rgba(255, 255, 255, 0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "1px solid rgba(255, 255, 255, 0.3)",
+              boxShadow: "inset 0 1px 2px rgba(255,255,255,0.15)",
+              flexShrink: 0,
+            }}>
+              <ClipboardList size={18} style={{ color: "#ffffff" }} />
             </div>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "#92400e" }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#ffffff", letterSpacing: "-0.01em", textShadow: "0 1px 2px rgba(0,0,0,0.1)" }}>
                 {pendingAcceptance} task{pendingAcceptance > 1 ? "s" : ""} need{pendingAcceptance === 1 ? "s" : ""} your response
               </div>
-              <div style={{ fontSize: 10, color: "#d97706", fontWeight: 600 }}>Tap to accept or decline</div>
+              <div style={{ fontSize: 10, color: "rgba(255, 255, 255, 0.8)", fontWeight: 700, letterSpacing: "0.02em" }}>
+                Tap to accept or decline
+              </div>
             </div>
-            <ArrowRight size={16} style={{ color: "#d97706" }} />
+            <ArrowRight size={16} style={{ color: "#ffffff", marginLeft: 4 }} />
           </div>
         )}
       </div>

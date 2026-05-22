@@ -10,6 +10,9 @@ class LeaveRequest(models.Model):
         PENDING = "pending", "Pending"
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
+        CANCELLED = "cancelled", "Cancelled"
+        REWORK = "rework", "Rework"
+        PENDING_CANCEL = "pending_cancel", "Pending Cancellation"
 
     class LeaveType(models.TextChoices):
         VACATION = "vacation", "Vacation"

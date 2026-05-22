@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Bell, CheckSquare, Clock, ArrowRight, CalendarDays, Banknote, AlertCircle } from "lucide-react"
+import { Bell, CheckSquare, Clock, ArrowRight, CalendarDays, Banknote, AlertCircle, LogIn } from "lucide-react"
 
 import { apiRequest, unwrapResults } from "../../api/client.js"
 import { useAuth } from "../../state/auth/useAuth.js"
@@ -251,7 +251,29 @@ export function NotificationCenter() {
       let sos = []; try { if (isAdmin) sos = await apiRequest("/live-locations/sos/") } catch(e) {}
       let timesheet = null; try { timesheet = await apiRequest("/time/timesheets/") } catch(e) {}
 
-      const next = buildNotifications({ tasks, leaves, shifts, payroll, timesheet, sos, isAdmin })
+      // ── Early-return / cancel notifications from the backend ──────────
+      let backendNotifs = []
+      try { backendNotifs = await apiRequest("/leaves/notifications/") } catch(e) {}
+      const backendItems = (Array.isArray(backendNotifs) ? backendNotifs : []).map(n => ({
+        id: `backend:${n.notif_type}:${n.created_at}`,
+        kind: "early_return",
+        when: n.created_at ? new Date(n.created_at) : null,
+        to: isAdmin ? routes.employees : routes.leaves,
+        read: !!n.read,
+        icon: { bg: "#d1fae5", fg: "#065f46", el: <LogIn size={16} /> },
+        body: (
+          <span>
+            <strong>{n.title?.replace(/^[🏃✅]\s*/, "")}</strong>
+            {n.employee_name ? <span style={{ color: "var(--muted)", fontWeight: 600 }}> · {n.employee_name}</span> : null}<br />
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>{n.body}</span>
+          </span>
+        ),
+      }))
+
+      const next = [
+        ...backendItems,
+        ...buildNotifications({ tasks, leaves, shifts, payroll, timesheet, sos, isAdmin })
+      ]
       setItems(next)
     } catch {
       setError("Failed to load notifications.")
@@ -263,7 +285,7 @@ export function NotificationCenter() {
 
   useEffect(() => {
     load()
-    const t = setInterval(load, 180_000) // 3 minutes
+    const t = setInterval(load, 60_000) // 1 minute to catch early returns fast
     return () => clearInterval(t)
   }, [load])
 

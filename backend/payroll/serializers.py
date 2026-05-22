@@ -14,9 +14,17 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
 class PayrollRecordSerializer(serializers.ModelSerializer):
     id = serializers.CharField(read_only=True)
     employee = serializers.CharField(source="employee.employee_id", read_only=True)
-    employee_name = serializers.CharField(source="employee.user.get_full_name", read_only=True)
+    employee_name = serializers.SerializerMethodField()
     generated_by = serializers.CharField(source="generated_by.id", read_only=True)
     period = PayrollPeriodSerializer(read_only=True)
+
+    def get_employee_name(self, obj):
+        """Return full name, falling back to username if not set."""
+        try:
+            name = obj.employee.user.get_full_name()
+            return name.strip() if name.strip() else obj.employee.user.username
+        except Exception:
+            return ""
 
     class Meta:
         model = PayrollRecord

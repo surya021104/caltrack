@@ -1744,7 +1744,7 @@ function EmployeeTimePage() {
                     >
                       <option value="">— No specific task —</option>
                       {assignedTasks
-                        .filter(t => t.status === 'pending' || t.status === 'in_progress')
+                        .filter(t => (t.status === 'pending' || t.status === 'in_progress') && t.acceptance_status === 'accepted')
                         .map(t => (
                           <option key={t.id} value={t.id}>{t.title}</option>
                         ))
